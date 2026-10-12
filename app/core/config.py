@@ -1,0 +1,14 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    app_name: str = "LLM MemoryGrid"
+    version: str = "0.3.0"
+    node_count: int = 4
+    cache_size_per_node: int = 1000
+    default_ttl_seconds: int = 300
+
+    model_config = SettingsConfigDict(env_file=".env")
+
+
+settings = Settings()

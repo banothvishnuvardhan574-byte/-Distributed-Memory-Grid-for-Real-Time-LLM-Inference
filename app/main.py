@@ -5,15 +5,17 @@ from uuid import uuid4
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from app.core.config import settings
+
 try:
     from pypdf import PdfReader
 except ImportError:
     PdfReader = None
 
 app = FastAPI(
-    title="LLM MemoryGrid",
+    title=settings.app_name,
     description="Backend API for real-time LLM inference",
-    version="0.2.0",
+    version=settings.version,
 )
 
 

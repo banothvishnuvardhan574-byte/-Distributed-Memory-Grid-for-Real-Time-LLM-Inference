@@ -8,7 +8,11 @@ class Settings(BaseSettings):
     cache_size_per_node: int = 1000
     default_ttl_seconds: int = 300
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()

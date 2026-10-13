@@ -5,12 +5,28 @@ import pytest
 from worker.worker import process_prompt
 
 
+def successful_inference(prompt: str) -> str:
+    return "Hello back!"
+
+
+def echo_inference(prompt: str) -> str:
+    return f"You said: {prompt}"
+
+
+def failing_inference(prompt: str) -> str:
+    raise RuntimeError("Model is unavailable")
+
+
+def slow_inference(prompt: str) -> str:
+    time.sleep(2)
+    return "This response is too late"
+
 
 def test_process_prompt_returns_response():
     result = process_prompt(
         request_id="123",
         prompt="Hello",
-        inference_fn=lambda prompt: "Hello back!",
+        inference_fn=successful_inference,
     )
 
     assert result == {
@@ -24,7 +40,7 @@ def test_process_prompt_removes_extra_spaces():
     result = process_prompt(
         request_id="456",
         prompt="  Hello  ",
-        inference_fn=lambda prompt: f"You said: {prompt}",
+        inference_fn=echo_inference,
     )
 
     assert result["response"] == "You said: Hello"
@@ -35,13 +51,11 @@ def test_process_prompt_rejects_empty_prompt():
         process_prompt(
             request_id="789",
             prompt="   ",
-            inference_fn=lambda prompt: "This should not run",
+            inference_fn=successful_inference,
         )
 
-def test_process_prompt_handles_inference_error():
-    def failing_inference(prompt: str) -> str:
-        raise RuntimeError("Model is unavailable")
 
+def test_process_prompt_handles_inference_error():
     result = process_prompt(
         request_id="999",
         prompt="Hello",
@@ -52,11 +66,8 @@ def test_process_prompt_handles_inference_error():
     assert result["request_id"] == "999"
     assert result["response"] == "Failed to process prompt"
 
-def test_process_prompt_handles_timeout():
-    def slow_inference(prompt: str) -> str:
-        time.sleep(2)
-        return "This response is too late"
 
+def test_process_prompt_handles_timeout():
     result = process_prompt(
         request_id="timeout-001",
         prompt="Hello",

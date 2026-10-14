@@ -27,10 +27,17 @@ export default function PromptInputArea({
   isLoading,
   onClear,
 }) {
+  const trimmedPrompt = (prompt || '').trim();
+  const charCount = (prompt || '').length;
+  const wordCount = trimmedPrompt ? trimmedPrompt.split(/\s+/).length : 0;
+  // Estimate tokens (~4 chars per token)
+  const tokenEstimate = Math.ceil(charCount / 4);
+  const isSubmitDisabled = isLoading || trimmedPrompt.length === 0;
+
   const handleKeyDown = (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
-      if (!isLoading && prompt.trim()) {
+      if (!isSubmitDisabled) {
         onSubmit();
       }
     }
@@ -39,11 +46,6 @@ export default function PromptInputArea({
   const handleSelectSample = (sample) => {
     setPrompt(sample);
   };
-
-  const charCount = prompt.length;
-  const wordCount = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
-  // Estimate tokens (~4 chars per token)
-  const tokenEstimate = Math.ceil(charCount / 4);
 
   return (
     <Paper
@@ -153,7 +155,7 @@ export default function PromptInputArea({
 
         {/* Action buttons */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {prompt.length > 0 && (
+          {charCount > 0 && (
             <Button
               id="clear-prompt-btn"
               variant="text"
@@ -173,7 +175,7 @@ export default function PromptInputArea({
             variant="contained"
             color="primary"
             onClick={onSubmit}
-            disabled={isLoading || !prompt.trim()}
+            disabled={isSubmitDisabled}
             endIcon={<SendRoundedIcon />}
             sx={{
               px: 3.5,

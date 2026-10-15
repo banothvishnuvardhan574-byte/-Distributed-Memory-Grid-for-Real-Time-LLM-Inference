@@ -21,29 +21,34 @@ const SAMPLE_PROMPTS = [
 ];
 
 export default function PromptInputArea({
-  prompt,
+  prompt = '',
   setPrompt,
   onSubmit,
-  isLoading,
+  isLoading = false,
   onClear,
 }) {
+  const safePrompt = prompt ?? '';
+  const trimmedPrompt = safePrompt.trim();
+  const charCount = safePrompt.length;
+  const wordCount = trimmedPrompt ? trimmedPrompt.split(/\s+/).length : 0;
+  // Estimate tokens (~4 chars per token)
+  const tokenEstimate = Math.ceil(charCount / 4);
+  const isSubmitDisabled = Boolean(isLoading) || trimmedPrompt.length === 0;
+
   const handleKeyDown = (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
-      if (!isLoading && prompt.trim()) {
+      if (!isSubmitDisabled && onSubmit) {
         onSubmit();
       }
     }
   };
 
   const handleSelectSample = (sample) => {
-    setPrompt(sample);
+    if (setPrompt) {
+      setPrompt(sample);
+    }
   };
-
-  const charCount = prompt.length;
-  const wordCount = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
-  // Estimate tokens (~4 chars per token)
-  const tokenEstimate = Math.ceil(charCount / 4);
 
   return (
     <Paper
@@ -76,7 +81,7 @@ export default function PromptInputArea({
         <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mb: 0.8, fontWeight: 500 }}>
           Quick Test Prompts:
         </Typography>
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ gap: 1 }}>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', gap: 1 }}>
           {SAMPLE_PROMPTS.map((sample, idx) => (
             <Chip
               key={idx}
@@ -107,8 +112,8 @@ export default function PromptInputArea({
         rows={4}
         fullWidth
         placeholder="Enter your prompt here... (e.g., query distributed memory cache, test node routing, or run inference)"
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
+        value={safePrompt}
+        onChange={(e) => setPrompt && setPrompt(e.target.value)}
         onKeyDown={handleKeyDown}
         disabled={isLoading}
         variant="outlined"
@@ -153,7 +158,7 @@ export default function PromptInputArea({
 
         {/* Action buttons */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {prompt.length > 0 && (
+          {charCount > 0 && (
             <Button
               id="clear-prompt-btn"
               variant="text"
@@ -173,7 +178,7 @@ export default function PromptInputArea({
             variant="contained"
             color="primary"
             onClick={onSubmit}
-            disabled={isLoading || !prompt.trim()}
+            disabled={isSubmitDisabled}
             endIcon={<SendRoundedIcon />}
             sx={{
               px: 3.5,

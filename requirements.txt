@@ -3,3 +3,5 @@ pydantic>=2.7.0
 pydantic-settings>=2.2.1
 pypdf>=4.0.0
 python-multipart>=0.0.18
+pytest>=8.0.0 
+httpx>=0.30.0

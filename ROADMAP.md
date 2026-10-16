@@ -5,4 +5,5 @@
 - [x] Day 3 - Add prompt hashing utilities for cache keys and node routing.
 - [x] Day 4: LRU cache eviction policy
 - [x] Day 5: Memory nodes with TTL expiration
-- [ ] Day 6 - Hash-based routing
+- [x] Day 6 - Hash-based routing
+- [ ] Day 7 - MemoryGrid manager

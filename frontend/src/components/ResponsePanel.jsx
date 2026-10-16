@@ -66,11 +66,21 @@ export default function ResponsePanel({ responseData }) {
   const {
     request_id,
     message,
+    response: generatedResponse,
+    generated_text,
     status = 'accepted',
     latency = null,
-    timestamp = new Date().toLocaleTimeString(),
+    timestamp = '',
     prompt = '',
   } = responseData;
+
+  // Distinguish between a generated AI output and a backend acknowledgment
+  const hasGeneratedAnswer = Boolean(generated_text || generatedResponse);
+  const displayContent =
+    generated_text ||
+    generatedResponse ||
+    message ||
+    'Request received and processed by memory grid.';
 
   return (
     <>
@@ -215,17 +225,31 @@ export default function ResponsePanel({ responseData }) {
 
         <Divider sx={{ my: 2, borderColor: 'rgba(255, 255, 255, 0.08)' }} />
 
-        {/* Required Model Output Display */}
+        {/* Required Model Output or Acknowledgment Display */}
         <Box sx={{ position: 'relative' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="caption" sx={{ color: '#818cf8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Model Output & Pipeline Diagnostics
-            </Typography>
-            <Tooltip title={copiedField === 'output' ? 'Copied output text!' : 'Copy Output'}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" sx={{ color: hasGeneratedAnswer ? '#38bdf8' : '#818cf8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {hasGeneratedAnswer ? 'Generated AI Output' : 'Backend Acknowledgment & Status'}
+              </Typography>
+              <Chip
+                label={hasGeneratedAnswer ? 'Generated Answer' : 'Request Acknowledgment'}
+                size="small"
+                sx={{
+                  height: 20,
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  backgroundColor: hasGeneratedAnswer ? 'rgba(56, 189, 248, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                  color: hasGeneratedAnswer ? '#38bdf8' : '#a5b4fc',
+                  border: `1px solid ${hasGeneratedAnswer ? 'rgba(56, 189, 248, 0.3)' : 'rgba(99, 102, 241, 0.3)'}`,
+                }}
+              />
+            </Box>
+            <Tooltip title={copiedField === 'output' ? 'Copied text!' : 'Copy Text'}>
               <IconButton
                 id="copy-model-output-btn"
                 size="small"
-                onClick={() => handleCopy(message, 'output')}
+                onClick={() => handleCopy(displayContent, 'output')}
                 sx={{
                   color: copiedField === 'output' ? '#34d399' : '#94a3b8',
                   '&:hover': { color: '#ffffff' },
@@ -253,7 +277,7 @@ export default function ResponsePanel({ responseData }) {
               overflowY: 'auto',
             }}
           >
-            {message}
+            {displayContent}
           </Box>
         </Box>
       </Paper>

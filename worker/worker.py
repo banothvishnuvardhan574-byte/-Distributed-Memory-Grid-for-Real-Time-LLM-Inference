@@ -1,20 +1,9 @@
 
-import logging
-import multiprocessing
-import queue
 from collections.abc import Callable
-
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _run_inference(result_queue, inference_fn, prompt):
-    """Run inference in a separate process and return its result."""
-    try:
-        response = inference_fn(prompt)
-        result_queue.put(("completed", response))
-    except Exception:
-        result_queue.put(("failed", "Failed to process prompt"))
 
 
 def process_prompt(
@@ -23,7 +12,7 @@ def process_prompt(
     inference_fn: Callable[[str], str],
     timeout_seconds: float = 5.0,
 ) -> dict[str, str]:
-    """Process a prompt with process-based timeout handling."""
+    """Process a prompt with timeout and error handling."""
 
     clean_prompt = prompt.strip()
 
@@ -35,46 +24,33 @@ def process_prompt(
 
     logger.info("Processing request %s", request_id)
 
-    context = multiprocessing.get_context("spawn")
-    result_queue = context.Queue()
-    process = context.Process(
-        target=_run_inference,
-        args=(result_queue, inference_fn, clean_prompt),
-    )
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(inference_fn, clean_prompt)
 
     try:
-        process.start()
-        process.join(timeout_seconds)
+        response = future.result(timeout=timeout_seconds)
 
-        if process.is_alive():
-            process.terminate()
-            process.join()
-            logger.error("Request %s timed out", request_id)
-
-            return {
-                "request_id": request_id,
-                "status": "failed",
-                "response": "Inference timed out",
-            }
-
-        try:
-            status, response = result_queue.get(timeout=0.5)
-        except queue.Empty:
-            status, response = "failed", "Failed to process prompt"
-
-        if status == "completed":
-            logger.info("Request %s completed", request_id)
-        else:
-            logger.error("Request %s failed", request_id)
+        logger.info("Request %s completed", request_id)
 
         return {
             "request_id": request_id,
-            "status": status,
+            "status": "completed",
             "response": response,
+        }
+
+    except TimeoutError:
+        future.cancel()
+        logger.error("Request %s timed out", request_id)
+
+        return {
+            "request_id": request_id,
+            "status": "failed",
+            "response": "Inference timed out",
         }
 
     except Exception:
         logger.exception("Request %s failed", request_id)
+
         return {
             "request_id": request_id,
             "status": "failed",
@@ -82,9 +58,4 @@ def process_prompt(
         }
 
     finally:
-        if process.is_alive():
-            process.terminate()
-            process.join()
-
-        result_queue.close()
-        result_queue.join_thread()
+        executor.shutdown(wait=False, cancel_futures=True)

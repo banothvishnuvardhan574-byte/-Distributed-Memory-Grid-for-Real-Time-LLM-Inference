@@ -31,7 +31,8 @@ export default function App() {
   };
 
   const handleSubmit = useCallback(async () => {
-    if (!prompt.trim()) return;
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt || isLoading) return;
 
     setIsLoading(true);
     setError(null);
@@ -40,7 +41,7 @@ export default function App() {
     const startTime = performance.now();
 
     try {
-      // Step simulation for realistic feel
+      // Step simulation for realistic feedback
       setTimeout(() => {
         setLoadingStep('Dispatching inference to active memory grid nodes...');
       }, 350);
@@ -50,27 +51,49 @@ export default function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ prompt: prompt.trim() }),
+        body: JSON.stringify({ prompt: trimmedPrompt }),
       });
 
       const latencyMs = Math.round(performance.now() - startTime);
 
       if (!res.ok) {
-        let errorMsg = `Server error (${res.status}): ${res.statusText}`;
+        let errorMsg = `Server error (${res.status}): ${res.statusText || 'Request failed'}`;
         try {
-          const errJson = await res.json();
-          if (errJson.detail) {
-            errorMsg = Array.isArray(errJson.detail)
-              ? errJson.detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
-              : errJson.detail;
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const errJson = await res.json();
+            if (errJson && errJson.detail) {
+              errorMsg = Array.isArray(errJson.detail)
+                ? errJson.detail.map((d) => (typeof d === 'string' ? d : d.msg || JSON.stringify(d))).join(', ')
+                : typeof errJson.detail === 'object'
+                  ? JSON.stringify(errJson.detail)
+                  : String(errJson.detail);
+            } else if (errJson && errJson.message) {
+              errorMsg = String(errJson.message);
+            }
+          } else {
+            const text = await res.text();
+            if (text && text.trim().length > 0 && text.length < 300) {
+              errorMsg = text.trim();
+            }
           }
         } catch {
-          // fallback to status text
+          // fallback to standard status message
         }
         throw new Error(errorMsg);
       }
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Received invalid JSON response from server.');
+      }
+
+      if (!data || typeof data !== 'object') {
+        throw new Error('Unexpected response format received from inference service.');
+      }
+
       const enrichedData = {
         ...data,
         latency: latencyMs,
@@ -81,9 +104,9 @@ export default function App() {
       // Track in session history (real data only)
       setRequestHistory((prev) => [
         {
-          request_id: data.request_id,
-          status: data.status,
-          prompt: data.prompt || prompt.trim(),
+          request_id: data.request_id || 'N/A',
+          status: data.status || 'accepted',
+          prompt: data.prompt || trimmedPrompt,
           latency: latencyMs,
           timestamp: new Date().toLocaleTimeString(),
         },
@@ -91,8 +114,8 @@ export default function App() {
       ]);
     } catch (err) {
       console.error('Inference submission error:', err);
-      // Helpful error message if backend is not started
-      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      // Helpful error message if backend is not started or connection is refused
+      if (err.name === 'TypeError' && (err.message.includes('fetch') || err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
         setError(
           'Backend API is currently unreachable at http://localhost:8000/api/prompt. Ensure the FastAPI backend server is running, or verify your network connection.'
         );
@@ -102,7 +125,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt]);
+  }, [prompt, isLoading]);
 
   const handleClear = () => {
     setPrompt('');

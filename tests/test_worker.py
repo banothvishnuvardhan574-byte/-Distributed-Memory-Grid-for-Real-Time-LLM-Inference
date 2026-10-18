@@ -58,10 +58,11 @@ def test_process_prompt_removes_extra_spaces():
     )
 
     assert result["response"] == "You said: Hello"
+    assert result["status"] == "completed"
 
 
 def test_process_prompt_rejects_empty_prompt():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Prompt cannot be empty"):
         process_prompt(
             request_id="789",
             prompt="   ",
@@ -76,8 +77,8 @@ def test_process_prompt_handles_inference_error():
         inference_fn=failing_inference,
     )
 
-    assert result["status"] == "failed"
     assert result["request_id"] == "999"
+    assert result["status"] == "failed"
     assert result["response"] == "Failed to process prompt"
 
 
@@ -92,3 +93,13 @@ def test_process_prompt_handles_timeout():
     assert result["request_id"] == "timeout-001"
     assert result["status"] == "failed"
     assert result["response"] == "Inference timed out"
+
+
+def test_process_prompt_rejects_invalid_timeout():
+    with pytest.raises(ValueError, match="Timeout must be greater than zero"):
+        process_prompt(
+            request_id="timeout-002",
+            prompt="Hello",
+            inference_fn=successful_inference,
+            timeout_seconds=0,
+        )

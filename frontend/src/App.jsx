@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   ThemeProvider,
   CssBaseline,
@@ -6,17 +6,13 @@ import {
   Container,
   Typography,
   Grid,
-  Card,
-  CardContent,
 } from '@mui/material';
 import { theme } from './theme';
 import Header from './components/Header';
 import PromptInputArea from './components/PromptInputArea';
 import StatusAndLoading from './components/StatusAndLoading';
 import ResponsePanel from './components/ResponsePanel';
-import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded';
-import StorageRoundedIcon from '@mui/icons-material/StorageRounded';
-import SecurityRoundedIcon from '@mui/icons-material/SecurityRounded';
+import RequestHistory from './components/RequestHistory';
 
 export default function App() {
   const [prompt, setPrompt] = useState('');
@@ -24,9 +20,19 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState('Routing request to distributed grid...');
   const [error, setError] = useState(null);
   const [responseData, setResponseData] = useState(null);
+  const [requestHistory, setRequestHistory] = useState([]);
 
-  const handleSubmit = async () => {
-    if (!prompt.trim()) return;
+  // Derive application state for Header — based only on real frontend state
+  const getRequestState = () => {
+    if (isLoading) return 'submitting';
+    if (error) return 'error';
+    if (responseData) return 'responded';
+    return 'idle';
+  };
+
+  const handleSubmit = useCallback(async () => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt || isLoading) return;
 
     setIsLoading(true);
     setError(null);
@@ -35,7 +41,7 @@ export default function App() {
     const startTime = performance.now();
 
     try {
-      // Step simulation for realistic feel
+      // Step simulation for realistic feedback
       setTimeout(() => {
         setLoadingStep('Dispatching inference to active memory grid nodes...');
       }, 350);
@@ -45,36 +51,71 @@ export default function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ prompt: prompt.trim() }),
+        body: JSON.stringify({ prompt: trimmedPrompt }),
       });
 
       const latencyMs = Math.round(performance.now() - startTime);
 
       if (!res.ok) {
-        let errorMsg = `Server error (${res.status}): ${res.statusText}`;
+        let errorMsg = `Server error (${res.status}): ${res.statusText || 'Request failed'}`;
         try {
-          const errJson = await res.json();
-          if (errJson.detail) {
-            errorMsg = Array.isArray(errJson.detail)
-              ? errJson.detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
-              : errJson.detail;
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const errJson = await res.json();
+            if (errJson && errJson.detail) {
+              errorMsg = Array.isArray(errJson.detail)
+                ? errJson.detail.map((d) => (typeof d === 'string' ? d : d.msg || JSON.stringify(d))).join(', ')
+                : typeof errJson.detail === 'object'
+                  ? JSON.stringify(errJson.detail)
+                  : String(errJson.detail);
+            } else if (errJson && errJson.message) {
+              errorMsg = String(errJson.message);
+            }
+          } else {
+            const text = await res.text();
+            if (text && text.trim().length > 0 && text.length < 300) {
+              errorMsg = text.trim();
+            }
           }
-        } catch (_) {
-          // fallback to status text
+        } catch {
+          // fallback to standard status message
         }
         throw new Error(errorMsg);
       }
 
-      const data = await res.json();
-      setResponseData({
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Received invalid JSON response from server.');
+      }
+
+      if (!data || typeof data !== 'object') {
+        throw new Error('Unexpected response format received from inference service.');
+      }
+
+      const enrichedData = {
         ...data,
         latency: latencyMs,
         timestamp: new Date().toLocaleTimeString(),
-      });
+      };
+      setResponseData(enrichedData);
+
+      // Track in session history (real data only)
+      setRequestHistory((prev) => [
+        {
+          request_id: data.request_id || 'N/A',
+          status: data.status || 'accepted',
+          prompt: data.prompt || trimmedPrompt,
+          latency: latencyMs,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...prev,
+      ]);
     } catch (err) {
       console.error('Inference submission error:', err);
-      // Helpful error message if backend is not started
-      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      // Helpful error message if backend is not started or connection is refused
+      if (err.name === 'TypeError' && (err.message.includes('fetch') || err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
         setError(
           'Backend API is currently unreachable at http://localhost:8000/api/prompt. Ensure the FastAPI backend server is running, or verify your network connection.'
         );
@@ -84,7 +125,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [prompt, isLoading]);
 
   const handleClear = () => {
     setPrompt('');
@@ -99,97 +140,70 @@ export default function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        {/* Top Header */}
-        <Header />
+        {/* Top Header — reflects actual application state */}
+        <Header
+          requestState={getRequestState()}
+          totalRequests={requestHistory.length}
+        />
 
-        {/* Main Content Area */}
-        <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 }, flexGrow: 1 }}>
-          {/* Hero Banner */}
-          <Box sx={{ mb: 4, textAlign: 'center' }}>
+        {/* Main Dashboard Content Area */}
+        <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 }, flexGrow: 1 }}>
+          {/* Dashboard Title */}
+          <Box sx={{ mb: 3 }}>
             <Typography
               variant="h4"
               component="h2"
               sx={{
                 fontWeight: 800,
                 letterSpacing: '-0.03em',
-                mb: 1,
+                mb: 0.5,
                 background: 'linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #818cf8 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              Real-Time LLM Inference Interface
+              Inference Dashboard
             </Typography>
-            <Typography variant="body1" sx={{ color: '#94a3b8', maxWidth: 650, mx: 'auto' }}>
-              Submit prompts directly to the distributed memory grid cluster. Monitor execution lifecycle, retrieve generated outputs, and inspect unique Request IDs.
+            <Typography variant="body2" sx={{ color: '#94a3b8', maxWidth: 600 }}>
+              Submit prompts to the backend API, view request acknowledgments with unique Request IDs, and track your session history.
             </Typography>
           </Box>
 
-          {/* Feature highlights chips / stats */}
-          <Grid container spacing={2} sx={{ mb: 3.5 }}>
-            <Grid item xs={12} sm={4}>
-              <Card sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, backgroundColor: 'rgba(15, 23, 42, 0.5)' }}>
-                <SpeedRoundedIcon sx={{ color: '#38bdf8' }} />
-                <Box>
-                  <Typography variant="caption" sx={{ color: '#64748b', display: 'block', fontWeight: 600 }}>
-                    LATENCY TARGET
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#f1f5f9' }}>
-                    Sub-millisecond KV Cache
-                  </Typography>
-                </Box>
-              </Card>
+          {/* Dashboard Grid — two-column on desktop, stacked on mobile */}
+          <Grid container spacing={3}>
+            {/* Left Column: Prompt Submission & Loading/Error */}
+            <Grid item xs={12} md={8}>
+              {/* 1. Prompt Input Area (includes Prompt Text Area & Primary Submit Button) */}
+              <PromptInputArea
+                prompt={prompt}
+                setPrompt={setPrompt}
+                onSubmit={handleSubmit}
+                isLoading={isLoading}
+                onClear={handleClear}
+              />
+
+              {/* 2. Loading Indicator & Error Message Area */}
+              <StatusAndLoading
+                isLoading={isLoading}
+                loadingStep={loadingStep}
+                error={error}
+                onDismissError={handleDismissError}
+                onRetry={handleSubmit}
+              />
+
+              {/* 3. Response Panel (Model Output and Request ID) */}
+              <Box sx={{ mt: 2 }}>
+                <ResponsePanel responseData={responseData} />
+              </Box>
             </Grid>
-            <Grid item xs={12} sm={4}>
-              <Card sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, backgroundColor: 'rgba(15, 23, 42, 0.5)' }}>
-                <StorageRoundedIcon sx={{ color: '#a855f7' }} />
-                <Box>
-                  <Typography variant="caption" sx={{ color: '#64748b', display: 'block', fontWeight: 600 }}>
-                    GRID TOPOLOGY
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#f1f5f9' }}>
-                    Distributed Partitioning
-                  </Typography>
-                </Box>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <Card sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, backgroundColor: 'rgba(15, 23, 42, 0.5)' }}>
-                <SecurityRoundedIcon sx={{ color: '#10b981' }} />
-                <Box>
-                  <Typography variant="caption" sx={{ color: '#64748b', display: 'block', fontWeight: 600 }}>
-                    RELIABILITY
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#f1f5f9' }}>
-                    Deterministic Request UUIDs
-                  </Typography>
-                </Box>
-              </Card>
+
+            {/* Right Column: Session Request History */}
+            <Grid item xs={12} md={4}>
+              <Box sx={{ position: { md: 'sticky' }, top: { md: 24 } }}>
+                <RequestHistory history={requestHistory} />
+              </Box>
             </Grid>
           </Grid>
-
-          {/* 1. Prompt Input Area (includes Prompt Text Area & Primary Submit Button) */}
-          <PromptInputArea
-            prompt={prompt}
-            setPrompt={setPrompt}
-            onSubmit={handleSubmit}
-            isLoading={isLoading}
-            onClear={handleClear}
-          />
-
-          {/* 2. Loading Indicator & Error Message Area */}
-          <StatusAndLoading
-            isLoading={isLoading}
-            loadingStep={loadingStep}
-            error={error}
-            onDismissError={handleDismissError}
-            onRetry={handleSubmit}
-          />
-
-          {/* 3. Response Panel (Model Output and Request ID) */}
-          <Box sx={{ mt: 3 }}>
-            <ResponsePanel responseData={responseData} />
-          </Box>
         </Container>
 
         {/* Footer */}

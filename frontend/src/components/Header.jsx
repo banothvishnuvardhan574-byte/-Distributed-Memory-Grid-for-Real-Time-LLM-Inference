@@ -9,11 +9,30 @@ import {
   Tooltip,
 } from '@mui/material';
 import MemoryIcon from '@mui/icons-material/Memory';
-import HubIcon from '@mui/icons-material/Hub';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import TerminalIcon from '@mui/icons-material/Terminal';
+import CircleIcon from '@mui/icons-material/Circle';
 
-export default function Header() {
+/**
+ * Derives visual state for the header status indicator based on
+ * the actual frontend application state — no unverified claims.
+ */
+function getStateConfig(requestState) {
+  switch (requestState) {
+    case 'submitting':
+      return { label: 'Submitting…', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.3)' };
+    case 'error':
+      return { label: 'Error', color: '#f87171', bg: 'rgba(248, 113, 113, 0.12)', border: 'rgba(248, 113, 113, 0.3)' };
+    case 'responded':
+      return { label: 'Response Ready', color: '#34d399', bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.3)' };
+    default:
+      return { label: 'Idle', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.1)', border: 'rgba(148, 163, 184, 0.2)' };
+  }
+}
+
+export default function Header({ requestState = 'idle', totalRequests = 0 }) {
+  const stateConfig = getStateConfig(requestState);
+
   return (
     <AppBar
       position="static"
@@ -93,16 +112,37 @@ export default function Header() {
             />
           </Tooltip>
 
-          <Tooltip title="Memory grid node connectivity status">
+          {/* Session request count */}
+          {totalRequests > 0 && (
+            <Tooltip title={`${totalRequests} request${totalRequests !== 1 ? 's' : ''} submitted this session`}>
+              <Chip
+                id="session-request-count"
+                label={`${totalRequests} req${totalRequests !== 1 ? 's' : ''}`}
+                size="small"
+                sx={{
+                  backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                  color: '#a5b4fc',
+                  border: '1px solid rgba(99, 102, 241, 0.2)',
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontWeight: 600,
+                  fontSize: '0.7rem',
+                  display: { xs: 'none', md: 'inline-flex' },
+                }}
+              />
+            </Tooltip>
+          )}
+
+          {/* Application state indicator — reflects actual frontend state */}
+          <Tooltip title={`Application state: ${stateConfig.label}`}>
             <Chip
-              id="grid-status-chip"
-              icon={<HubIcon sx={{ fontSize: '16px !important', color: '#10b981 !important' }} />}
-              label="Grid Node Ready"
+              id="app-state-chip"
+              icon={<CircleIcon sx={{ fontSize: '10px !important', color: `${stateConfig.color} !important` }} />}
+              label={stateConfig.label}
               size="small"
               sx={{
-                backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                color: '#34d399',
-                border: '1px solid rgba(16, 185, 129, 0.25)',
+                backgroundColor: stateConfig.bg,
+                color: stateConfig.color,
+                border: `1px solid ${stateConfig.border}`,
                 fontWeight: 600,
                 fontSize: '0.75rem',
               }}

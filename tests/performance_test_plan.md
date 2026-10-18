@@ -143,13 +143,18 @@ worker_timeout_seconds=5.0
 ---
 
 ## Summary metrics to report
-- API ack latency: mean, median, p95
-- Model generation latency: mean, median, p95
-- API success rate
-- Model success rate
-- Timeout count
-- Error count by type
-- Environment snapshot for each run
+Record the following table for each run. Keep API acknowledgement latency separate from model generation latency; leave generation values unmeasured until a real model is connected.
+
+| Metric | Definition | Current result | How to record |
+|---|---|---|---|
+| API acknowledgement latency | Mean, median, and p95 round-trip time for `POST /api/prompt` | Not measured in this report | Record `latency_ms` for every API request and summarize in milliseconds |
+| API success rate | Successful HTTP 200 responses with a valid `request_id` divided by total API requests | Not measured in this report | Report as a percentage, with failures and HTTP status codes |
+| Model generation latency | Mean, median, and p95 time for the worker to return a final model result | Not measured; real model integration is pending | Measure separately around `process_prompt(...)` once connected to the model |
+| Model success rate | Completed model responses divided by total model attempts | Not measured; real model integration is pending | Report as a percentage, with failed and timed-out attempts |
+| Failures and timeouts | Counts grouped by failure type | Not measured in this report | Count HTTP errors, worker failures, timeouts, and network errors separately |
+| Environment | OS, Python, CPU, memory, commit, app mode, model, and worker timeout | Capture for each run | Include the environment block alongside the results |
+
+Do not describe a speedup or distributed performance improvement unless comparable baseline and follow-up runs have been recorded using the same prompts, environment, and procedure.
 
 ---
 

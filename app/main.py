@@ -6,6 +6,11 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.grid.memory_node import MemoryNode
+from app.grid.router import GridRouter
+from worker.worker import process_prompt
+
+
 
 try:
     from pypdf import PdfReader
@@ -21,6 +26,32 @@ app = FastAPI(
 
 class PromptRequest(BaseModel):
     prompt: str
+
+
+router = GridRouter(node_count=settings.node_count)
+nodes = [MemoryNode(node_id=node_id) for node_id in range(settings.node_count)]
+
+
+def stub_inference(prompt: str) -> str:
+    return f"[stub] echo: {prompt[:200]}"
+
+
+def run_prompt(prompt: str, request_id: str) -> dict[str, str]:
+    node = nodes[router.route(prompt)]
+    cached = node.get(prompt)
+    if cached is not None:
+        return {
+            "request_id": request_id,
+            "status": "completed",
+            "response": cached,
+            "cache": "hit",
+        }
+
+    result = process_prompt(request_id, prompt, stub_inference)
+    if result["status"] == "completed":
+        node.set(prompt, result["response"])
+        result["cache"] = "miss"
+    return result
 
 
 def find_today_date_matches(text: str, day: int = 11, month: str = "oct") -> list[str]:
@@ -79,7 +110,7 @@ def home():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    return {"status": "ok"}
 
 
 @app.post("/api/prompt")
@@ -93,16 +124,20 @@ def submit_prompt(request: PromptRequest):
         )
 
     request_id = str(uuid4())
+    result = run_prompt(prompt, request_id)
 
     return {
-        "request_id": request_id,
-        "status": "accepted",
+        "request_id": result["request_id"],
+        "status": result["status"],
         "prompt": prompt,
-        "message": (
-            "Prompt received successfully. "
-            "LLM inference is not connected yet."
-        ),
+        "response": result["response"],
+        "cache": result.get("cache", "miss"),
     }
+
+
+@app.get("/api/grid/stats")
+def grid_stats():
+    return {"nodes": [node.stats() for node in nodes]}
 
 
 @app.post("/api/pdf/today")
@@ -119,7 +154,18 @@ async def extract_today_pdf_matches(
 
     file_bytes = await file.read()
     text = extract_pdf_text(file_bytes)
-    matches = find_today_date_matches(text, day=day, month=month.lower())
+    normalized_text = normalize_pdf_text(text)
+
+    request_id = str(uuid4())
+    cache_key = f"pdf:{file.filename}:{request_id}"
+    node = nodes[router.route(cache_key)]
+    node.set(cache_key, normalized_text)
+
+    matches = find_today_date_matches(
+      normalized_text,
+      day=day,
+      month=month.lower(),
+    )
 
     return {
         "file_name": file.filename,
@@ -131,9 +177,8 @@ async def extract_today_pdf_matches(
             "Only the requested date has been extracted."
         ),
     }
-from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 
-from app.core.config import settings
+def normalize_pdf_text(text: str) -> str:
+    """Normalize extracted PDF text for consistent grid storage."""
+    return re.sub(r"\s+", " ", text).strip()

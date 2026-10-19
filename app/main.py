@@ -10,6 +10,8 @@ from app.grid.memory_node import MemoryNode
 from app.grid.router import GridRouter
 from worker.worker import process_prompt
 
+
+
 try:
     from pypdf import PdfReader
 except ImportError:
@@ -152,7 +154,18 @@ async def extract_today_pdf_matches(
 
     file_bytes = await file.read()
     text = extract_pdf_text(file_bytes)
-    matches = find_today_date_matches(text, day=day, month=month.lower())
+    normalized_text = normalize_pdf_text(text)
+
+    request_id = str(uuid4())
+    cache_key = f"pdf:{file.filename}:{request_id}"
+    node = nodes[router.route(cache_key)]
+    node.set(cache_key, normalized_text)
+
+    matches = find_today_date_matches(
+      normalized_text,
+      day=day,
+      month=month.lower(),
+    )
 
     return {
         "file_name": file.filename,
@@ -164,9 +177,8 @@ async def extract_today_pdf_matches(
             "Only the requested date has been extracted."
         ),
     }
-from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 
-from app.core.config import settings
+def normalize_pdf_text(text: str) -> str:
+    """Normalize extracted PDF text for consistent grid storage."""
+    return re.sub(r"\s+", " ", text).strip()

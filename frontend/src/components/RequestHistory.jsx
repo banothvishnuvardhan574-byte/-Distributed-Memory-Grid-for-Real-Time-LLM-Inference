@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Paper,
   Box,
@@ -10,6 +10,7 @@ import {
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import FingerprintRoundedIcon from '@mui/icons-material/FingerprintRounded';
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
 
 /**
@@ -18,9 +19,15 @@ import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlin
  * actual API responses; nothing is fabricated or simulated.
  */
 export default function RequestHistory({ history = [] }) {
+  const [copiedId, setCopiedId] = useState(null);
+
   const handleCopyId = (id) => {
-    if (!id) return;
+    if (!id || id === 'N/A') return;
     navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    setTimeout(() => {
+      setCopiedId((curr) => (curr === id ? null : curr));
+    }, 2000);
   };
 
   if (history.length === 0) {
@@ -140,17 +147,22 @@ export default function RequestHistory({ history = [] }) {
                 {entry.request_id ? entry.request_id.slice(0, 8) + '…' : 'N/A'}
               </Typography>
 
-              <Tooltip title="Copy full Request ID">
+              <Tooltip title={copiedId === entry.request_id ? 'Copied Request ID!' : 'Copy full Request ID'}>
                 <IconButton
                   size="small"
+                  aria-label={copiedId === entry.request_id ? 'Request ID copied' : 'Copy full Request ID'}
                   onClick={() => handleCopyId(entry.request_id)}
                   sx={{
                     p: 0.3,
-                    color: '#64748b',
-                    '&:hover': { color: '#c084fc' },
+                    color: copiedId === entry.request_id ? '#34d399' : '#64748b',
+                    '&:hover': { color: copiedId === entry.request_id ? '#34d399' : '#c084fc' },
                   }}
                 >
-                  <ContentCopyRoundedIcon sx={{ fontSize: 12 }} />
+                  {copiedId === entry.request_id ? (
+                    <CheckRoundedIcon sx={{ fontSize: 12 }} />
+                  ) : (
+                    <ContentCopyRoundedIcon sx={{ fontSize: 12 }} />
+                  )}
                 </IconButton>
               </Tooltip>
 

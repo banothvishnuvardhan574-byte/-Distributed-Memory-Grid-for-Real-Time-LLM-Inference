@@ -1,20 +1,24 @@
 
+from collections.abc import Callable
 import logging
 import multiprocessing
-import queue
-from collections.abc import Callable
-
+from multiprocessing.connection import Connection
 
 logger = logging.getLogger(__name__)
 
 
-def _run_inference(result_queue, inference_fn, prompt):
-    """Run inference in a separate process and return its result."""
+def _run_inference(
+    connection: Connection,
+    inference_fn: Callable[[str], str],
+    prompt: str,
+) -> None:
+    """Run inference in a separate process and send back its result."""
     try:
-        response = inference_fn(prompt)
-        result_queue.put(("completed", response))
+        connection.send((True, inference_fn(prompt)))
     except Exception:
-        result_queue.put(("failed", "Failed to process prompt"))
+        connection.send((False, "Failed to process prompt"))
+    finally:
+        connection.close()
 
 
 def process_prompt(
@@ -22,8 +26,8 @@ def process_prompt(
     prompt: str,
     inference_fn: Callable[[str], str],
     timeout_seconds: float = 5.0,
-) -> dict[str, str]:
-    """Process a prompt with process-based timeout handling."""
+) -> dict[str, str | None]:
+    """Process a prompt with process-based timeout and error handling."""
 
     clean_prompt = prompt.strip()
 
@@ -35,56 +39,64 @@ def process_prompt(
 
     logger.info("Processing request %s", request_id)
 
-    context = multiprocessing.get_context("spawn")
-    result_queue = context.Queue()
-    process = context.Process(
+    receive_connection, send_connection = multiprocessing.Pipe(duplex=False)
+    process = multiprocessing.Process(
         target=_run_inference,
-        args=(result_queue, inference_fn, clean_prompt),
+        args=(send_connection, inference_fn, clean_prompt),
     )
 
     try:
         process.start()
-        process.join(timeout_seconds)
+        send_connection.close()
 
-        if process.is_alive():
+        if not receive_connection.poll(timeout_seconds):
+            logger.error("Request %s timed out", request_id)
             process.terminate()
             process.join()
-            logger.error("Request %s timed out", request_id)
 
             return {
                 "request_id": request_id,
                 "status": "failed",
-                "response": "Inference timed out",
+                "response": None,
+                "error": "Inference timed out",
             }
 
-        try:
-            status, response = result_queue.get(timeout=0.5)
-        except queue.Empty:
-            status, response = "failed", "Failed to process prompt"
+        succeeded, result = receive_connection.recv()
+        process.join()
 
-        if status == "completed":
+        if succeeded:
             logger.info("Request %s completed", request_id)
-        else:
-            logger.error("Request %s failed", request_id)
+            return {
+                "request_id": request_id,
+                "status": "completed",
+                "response": result,
+                "error": None,
+            }
 
+        logger.error("Request %s failed", request_id)
         return {
             "request_id": request_id,
-            "status": status,
-            "response": response,
+            "status": "failed",
+            "response": None,
+            "error": "Failed to process prompt",
         }
 
     except Exception:
         logger.exception("Request %s failed", request_id)
-        return {
-            "request_id": request_id,
-            "status": "failed",
-            "response": "Failed to process prompt",
-        }
 
-    finally:
         if process.is_alive():
             process.terminate()
             process.join()
 
-        result_queue.close()
-        result_queue.join_thread()
+        return {
+            "request_id": request_id,
+            "status": "failed",
+            "response": None,
+            "error": "Failed to process prompt",
+        }
+
+    finally:
+        receive_connection.close()
+        if process.is_alive():
+            process.terminate()
+            process.join()

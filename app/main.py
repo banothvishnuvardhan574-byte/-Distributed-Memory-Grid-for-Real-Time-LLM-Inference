@@ -12,6 +12,8 @@ from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
 from worker.worker import process_prompt
 
+
+
 try:
     from pypdf import PdfReader
 except ImportError:

@@ -23,7 +23,9 @@ export default function RequestHistory({ history = [] }) {
 
   const handleCopyId = (id) => {
     if (!id || id === 'N/A') return;
-    navigator.clipboard.writeText(id);
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(id).catch(() => {});
+    }
     setCopiedId(id);
     setTimeout(() => {
       setCopiedId((curr) => (curr === id ? null : curr));
@@ -132,6 +134,7 @@ export default function RequestHistory({ history = [] }) {
               <FingerprintRoundedIcon sx={{ color: '#a855f7', fontSize: 13 }} />
               <Typography
                 variant="caption"
+                title={entry.request_id || undefined}
                 sx={{
                   fontFamily: "'JetBrains Mono', monospace",
                   fontSize: '0.65rem',
@@ -150,7 +153,7 @@ export default function RequestHistory({ history = [] }) {
               <Tooltip title={copiedId === entry.request_id ? 'Copied Request ID!' : 'Copy full Request ID'}>
                 <IconButton
                   size="small"
-                  aria-label={copiedId === entry.request_id ? 'Request ID copied' : 'Copy full Request ID'}
+                  aria-label={copiedId === entry.request_id ? `Request ID ${entry.request_id} copied to clipboard` : `Copy full Request ID ${entry.request_id || ''}`}
                   onClick={() => handleCopyId(entry.request_id)}
                   sx={{
                     p: 0.3,

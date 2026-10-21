@@ -1,16 +1,27 @@
-# React + Vite
+# MemoryGrid frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+## Run locally
 
-Currently, two official plugins are available:
+Start the FastAPI backend from the repository root:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```text
+python -m uvicorn app.main:app --reload
+```
 
-## React Compiler
+Then start the frontend:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```text
+npm run dev
+```
 
-## Expanding the Oxlint configuration
+The Vite development server runs on port 3000 and proxies `/api` requests to
+`http://localhost:8000` by default. To call a different backend directly, set
+`VITE_API_URL` in a local `.env.local` file, for example:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+```text
+VITE_API_URL=http://localhost:8000
+```
+
+Direct cross-origin requests are enabled for the default local frontend origins.
+For another frontend origin, set `CORS_ORIGINS` for the backend to a JSON array
+of allowed origins, such as `["https://memorygrid.example"]`.

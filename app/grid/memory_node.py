@@ -50,6 +50,10 @@ class MemoryNode:
         self.policy.remove(key)
         return removed
 
+    def clear(self) -> None:
+        self.store.clear()
+        self.policy.clear()
+
     def stats(self) -> dict[str, int | bool]:
         return {
             "node_id": self.node_id,

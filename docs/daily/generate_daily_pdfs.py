@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 from fpdf import FPDF, XPos, YPos
@@ -198,22 +199,45 @@ DAY_PLANS = [
     },
     {
         "day": 10,
-        "phase": "Implementation (Days 8-14)",
-        "title": "Worker integration",
-        "goal": "Run prompts through the worker and store successful responses in the memory grid.",
+        "phase": "Week 2 - Implementation",
+        "title": "Code review round 1 + integration checkpoint",
+        "goal": "Review all modules working together on main, verify the integrated workflows, and fix the first real bugs.",
         "tasks": [
-            "Call process_prompt from the prompt API and return its status and response.",
-            "Support cache lookup before worker execution and cache successful worker output.",
-            "Define how PDF-derived text enters worker processing when applicable.",
-            "Test worker success, worker failure, timeout, and API response behavior.",
-            "Render worker response, status, and errors in the prompt UI.",
+            "Pull or confirm the latest main, install requirements, start the API, and run the full test suite. Check /health, prompt miss then hit, /api/pdf/today with a real PDF, and /api/grid/stats in Swagger. Add POST /api/grid/clear and its regression test; fix review bugs, collect member status notes, and write the Week 2 midpoint note and Days 11-12 bug list.",
+            "Add GridRouter tests proving the same key always selects the same node and that 100 keys distribute roughly evenly across nodes.",
+            "Handle multi-page PDFs and files with 10 or more pages; confirm extraction returns all matches without crashing and record extraction timing.",
+            "Add an integration test for POST /api/prompt through the worker, including request_id roundtrip, in tests/test_api_worker.py.",
+            "Complete the PDF upload UI roundtrip: file picker, POST /api/pdf/today, and display of the matches list.",
         ],
         "outputs": [
-            "Prompt route returns worker results.",
-            "Repeated prompts return a grid cache hit.",
-            "PDF/worker boundary is documented.",
-            "Worker/API integration tests pass.",
-            "Frontend shows response and failure states.",
+            "Review round 1 completed; health, prompt miss/hit, PDF upload, grid stats, and clear endpoint verified; midpoint status note and Days 11-12 bug list recorded.",
+            "GridRouter stability and approximate spread tests pass.",
+            "Multi-page and large-PDF extraction succeeds; all matches are returned and timing is noted.",
+            "Worker/API integration test verifies request_id roundtrip.",
+            "Browser upload roundtrip displays the returned PDF matches.",
+        ],
+        "commands": [
+            "pip install -r requirements.txt",
+            "uvicorn app.main:app --reload",
+            "pytest tests/ -v",
+            "Open http://localhost:8000/docs and verify /health, /api/prompt (miss then hit), /api/pdf/today with a real PDF, and /api/grid/stats.",
+            "curl -X POST http://localhost:8000/api/grid/clear",
+            "curl -X POST http://localhost:8000/api/pdf/today -F \"file=@sample.pdf\"",
+        ],
+        "github_steps": [
+            "Create your branch: git checkout -b member<N>-day10",
+            "Stage your changes: git add .",
+            'Commit: git commit -m "day10: <what you did>"',
+            "Push: git push origin member<N>-day10",
+            "Open a PR; Member 1 reviews and merges after checks pass.",
+            "After all PRs are merged: git checkout main && git pull; git tag day10 && git push origin day10",
+        ],
+        "checklist": [
+            "Full roundtrip works: UI to prompt to cache hit; UI to PDF to matches.",
+            "/api/grid/clear is added and its test passes.",
+            "All tests pass (pytest plus any frontend checks).",
+            "Days 11-12 bug list is created.",
+            "All PRs are merged, the day10 tag is pushed, and member status notes are collected.",
         ],
     },
     {
@@ -491,8 +515,15 @@ def generate_daily_pdf(plan: dict) -> Path:
         add_bullet(pdf, f"Assignment: {plan['tasks'][index]}")
         add_bullet(pdf, f"Expected output: {plan['outputs'][index]}")
 
+    if plan.get("commands"):
+        add_heading(pdf, "Commands and verification")
+        for command in plan["commands"]:
+            add_bullet(pdf, command)
+
     add_heading(pdf, "GitHub push and review")
-    if day_number == 5:
+    if plan.get("github_steps"):
+        steps = plan["github_steps"]
+    elif day_number == 5:
         steps = (
             "Create the branch: git checkout -b member1-day5",
             "Stage the backend and integration test: git add app/main.py tests/test_day5_integration.py",
@@ -516,7 +547,7 @@ def generate_daily_pdf(plan: dict) -> Path:
         add_bullet(pdf, step)
 
     add_heading(pdf, "End-of-day checklist")
-    checklist = [
+    checklist = plan.get("checklist") or [
         f"All five members posted a done/blocked status for day {day_number}.",
         "Each expected output is present or has an explicit blocker and owner.",
         "Relevant tests and local smoke checks pass.",
@@ -532,9 +563,19 @@ def generate_daily_pdf(plan: dict) -> Path:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate daily assignment PDFs.")
+    parser.add_argument(
+        "--day",
+        type=int,
+        choices=range(1, 21),
+        help="Generate only the selected day instead of refreshing all PDFs.",
+    )
+    args = parser.parse_args()
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    generated = [generate_daily_pdf(plan) for plan in DAY_PLANS]
-    print(f"Generated {len(generated)} daily assignment PDFs in {OUTPUT_DIR}")
+    plans = [plan for plan in DAY_PLANS if args.day is None or plan["day"] == args.day]
+    generated = [generate_daily_pdf(plan) for plan in plans]
+    print(f"Generated {len(generated)} daily assignment PDF(s) in {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

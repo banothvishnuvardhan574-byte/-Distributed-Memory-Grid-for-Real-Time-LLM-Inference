@@ -61,6 +61,7 @@ class PromptResponse(BaseModel):
 
 # Initialize memory grid
 grid = MemoryGrid(node_count=settings.node_count)
+cache_metrics = {"hits": 0, "misses": 0}
 
 
 @app.on_event("startup")
@@ -83,6 +84,7 @@ def run_prompt(prompt: str, request_id: str) -> dict:
     cached = grid.get(prompt)
 
     if cached is not None:
+        cache_metrics["hits"] += 1
         return {
             "request_id": request_id,
             "status": "completed",
@@ -91,6 +93,7 @@ def run_prompt(prompt: str, request_id: str) -> dict:
             "error": None,
         }
 
+    cache_metrics["misses"] += 1
     result = process_prompt(request_id, prompt, stub_inference)
 
     if result.get("status") == "completed":
@@ -243,7 +246,21 @@ def submit_prompt(request: PromptRequest):
 # Memory grid statistics
 @app.get("/api/grid/stats")
 def grid_stats():
-    return {"nodes": grid.stats()}
+    return {
+        "nodes": grid.stats(),
+        "cache_hits": cache_metrics["hits"],
+        "cache_misses": cache_metrics["misses"],
+    }
+
+
+@app.post("/api/grid/clear", status_code=200)
+def grid_clear():
+    for node in grid.nodes:
+        node.clear()
+
+    cache_metrics["hits"] = 0
+    cache_metrics["misses"] = 0
+    return {"status": "cleared", "nodes": len(grid.nodes)}
 
 
 # PDF date extraction endpoint

@@ -40,18 +40,58 @@ export default function RequestHistory({ history = [] }) {
         sx={{
           p: 2.5,
           borderRadius: 3,
-          textAlign: 'center',
           backgroundColor: 'rgba(15, 23, 42, 0.45)',
-          border: '1px dashed rgba(255, 255, 255, 0.1)',
+          border: '1px dashed rgba(255, 255, 255, 0.12)',
         }}
       >
-        <HistoryRoundedIcon sx={{ fontSize: 28, color: '#475569', mb: 1 }} />
-        <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
-          No requests yet
-        </Typography>
-        <Typography variant="caption" sx={{ color: '#475569', display: 'block', mt: 0.5 }}>
-          Submitted prompts will appear here during this session.
-        </Typography>
+        <Box sx={{ textAlign: 'center', mb: 2 }}>
+          <Box
+            sx={{
+              display: 'inline-flex',
+              p: 1.25,
+              borderRadius: '50%',
+              backgroundColor: 'rgba(99, 102, 241, 0.08)',
+              mb: 1,
+            }}
+          >
+            <HistoryRoundedIcon sx={{ fontSize: 28, color: '#818cf8' }} />
+          </Box>
+          <Typography variant="subtitle2" sx={{ color: '#e2e8f0', fontWeight: 600 }}>
+            No Requests in This Session
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block', mt: 0.5, lineHeight: 1.5 }}>
+            Each prompt submission is acknowledged with a unique Request ID, status, and latency.
+          </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            p: 1.5,
+            borderRadius: 2,
+            backgroundColor: 'rgba(10, 13, 20, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              color: '#818cf8',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              fontSize: '0.65rem',
+              display: 'block',
+              mb: 1,
+            }}
+          >
+            What to do next:
+          </Typography>
+          <Box component="ol" sx={{ m: 0, pl: 2.5, color: '#94a3b8', fontSize: '0.75rem', lineHeight: 1.6 }}>
+            <li>Choose a quick test prompt or write your own.</li>
+            <li>Click <strong>Submit Prompt</strong> or press <strong>Ctrl+Enter</strong>.</li>
+            <li>Inspect or copy the returned Request ID from this panel.</li>
+          </Box>
+        </Box>
       </Paper>
     );
   }

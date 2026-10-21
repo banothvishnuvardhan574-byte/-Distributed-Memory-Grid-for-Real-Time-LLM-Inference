@@ -39,6 +39,33 @@ def test_evicts_lru_when_over_capacity():
     assert node.get("c") == "3"
 
 
+def test_lru_eviction_stays_within_capacity_under_load():
+    node = MemoryNode(node_id=0, capacity=7)
+
+    for index in range(1000):
+        node.set(f"key-{index}", str(index))
+
+    assert len(node.store) == 7
+    assert len(node.policy) == 7
+    assert [node.get(f"key-{index}") for index in range(993, 1000)] == [
+        str(index) for index in range(993, 1000)
+    ]
+    assert node.get("key-992") is None
+
+
+def test_expiration_at_ttl_boundary_removes_key_and_lru_entry(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr("app.grid.memory_node.time.time", lambda: now[0])
+    node = MemoryNode(node_id=0, capacity=2)
+    node.set("expires", "value", ttl=5)
+
+    now[0] = 105.0
+
+    assert node.get("expires") is None
+    assert "expires" not in node.store
+    assert len(node.policy) == 0
+
+
 def test_delete():
     node = MemoryNode(node_id=0, capacity=10)
     node.set("k", "v")

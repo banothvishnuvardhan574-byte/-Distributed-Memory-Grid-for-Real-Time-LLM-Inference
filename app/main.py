@@ -1,13 +1,15 @@
 import io
+import logging
 import re
+from calendar import month_abbr, month_name
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.core.config import settings
-from app.grid.memory_node import MemoryNode
-from app.grid.router import GridRouter
+from app.grid.memory_grid import MemoryGrid
 from worker.worker import process_prompt
 
 
@@ -17,6 +19,13 @@ try:
 except ImportError:
     PdfReader = None
 
+
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("memgrid")
+
+
+# FastAPI application
 app = FastAPI(
     title=settings.app_name,
     description="Backend API for real-time LLM inference",
@@ -24,46 +33,117 @@ app = FastAPI(
 )
 
 
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(
+        set(settings.cors_origins + ["http://localhost:5173"])
+    ),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Request model
 class PromptRequest(BaseModel):
     prompt: str
 
 
-router = GridRouter(node_count=settings.node_count)
-nodes = [MemoryNode(node_id=node_id) for node_id in range(settings.node_count)]
+# Response model - Day 9
+class PromptResponse(BaseModel):
+    request_id: str
+    status: str
+    prompt: str
+    response: str | None
+    cache: str
+    error: str | None = None
 
 
+# Initialize memory grid
+grid = MemoryGrid(node_count=settings.node_count)
+cache_metrics = {"hits": 0, "misses": 0}
+
+
+@app.on_event("startup")
+def startup():
+    logger.info(
+        "MemoryGrid started: nodes=%s, ttl=%ss, capacity_per_node=%s",
+        settings.node_count,
+        settings.default_ttl_seconds,
+        settings.cache_size_per_node,
+    )
+
+
+# Stub inference function
 def stub_inference(prompt: str) -> str:
     return f"[stub] echo: {prompt[:200]}"
 
 
-def run_prompt(prompt: str, request_id: str) -> dict[str, str]:
-    node = nodes[router.route(prompt)]
-    cached = node.get(prompt)
+# Process prompt using memory grid and worker
+def run_prompt(prompt: str, request_id: str) -> dict:
+    cached = grid.get(prompt)
+
     if cached is not None:
+        cache_metrics["hits"] += 1
         return {
             "request_id": request_id,
             "status": "completed",
             "response": cached,
             "cache": "hit",
+            "error": None,
         }
 
+    cache_metrics["misses"] += 1
     result = process_prompt(request_id, prompt, stub_inference)
-    if result["status"] == "completed":
-        node.set(prompt, result["response"])
+
+    if result.get("status") == "completed":
+        grid.set(prompt, result["response"])
         result["cache"] = "miss"
+
     return result
 
 
-def find_today_date_matches(text: str, day: int = 11, month: str = "oct") -> list[str]:
-    if not text:
+# Find sentences containing a requested date
+def find_today_date_matches(
+    text: str,
+    day: int = 11,
+    month: str = "oct",
+) -> list[str]:
+    month = month.strip().lower()
+    if not text or not month:
         return []
 
-    month_pattern = re.escape(month)
+    month_index = next(
+        (
+            index
+            for index in range(1, 13)
+            if month in (month_abbr[index].lower(), month_name[index].lower())
+        ),
+        None,
+    )
+    month_names = {month}
+    if month_index is not None:
+        month_names.update(
+            {month_abbr[month_index].lower(), month_name[month_index].lower()}
+        )
+    month_pattern = "(?:" + "|".join(
+        re.escape(name) for name in sorted(month_names, key=len, reverse=True)
+    ) + ")"
+    day_pattern = rf"{day}(?:st|nd|rd|th)?"
+
     patterns = [
-        re.compile(rf"(?i)\b{day}\s*(?:/|-)\s*{month_pattern}\b"),
-        re.compile(rf"(?i)\b{day}\s+{month_pattern}\b"),
-        re.compile(rf"(?i)\b{month_pattern}\s+{day}\b"),
+        re.compile(rf"(?i)\b{day_pattern}\s*(?:/|-|\.)\s*{month_pattern}\b"),
+        re.compile(rf"(?i)\b{day_pattern}\s+{month_pattern}\b"),
+        re.compile(rf"(?i)\b{month_pattern}\s+{day_pattern}\b"),
     ]
+    if month_index is not None:
+        numeric_month = f"{month_index:02d}"
+        patterns.extend(
+            [
+                re.compile(rf"\b{day}\s*(?:/|-)\s*{numeric_month}(?!\d)"),
+                re.compile(rf"\b{numeric_month}\s*(?:/|-)\s*{day_pattern}(?!\d)"),
+            ]
+        )
 
     sentences = [
         sentence.strip()
@@ -71,14 +151,14 @@ def find_today_date_matches(text: str, day: int = 11, month: str = "oct") -> lis
         if sentence.strip()
     ]
 
-    matches: list[str] = []
-    for sentence in sentences:
-        if any(pattern.search(sentence) for pattern in patterns):
-            matches.append(sentence)
+    return [
+        sentence
+        for sentence in sentences
+        if any(pattern.search(sentence) for pattern in patterns)
+    ]
 
-    return matches
 
-
+# Extract text from PDF
 def extract_pdf_text(file_bytes: bytes) -> str:
     if PdfReader is None:
         raise HTTPException(
@@ -88,11 +168,11 @@ def extract_pdf_text(file_bytes: bytes) -> str:
 
     try:
         reader = PdfReader(io.BytesIO(file_bytes))
-        pages = []
-        for page in reader.pages:
-            text = page.extract_text() or ""
-            pages.append(text)
-        return "\n".join(pages)
+        return "\n".join(
+            page.extract_text() or ""
+            for page in reader.pages
+        )
+
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -100,6 +180,11 @@ def extract_pdf_text(file_bytes: bytes) -> str:
         ) from exc
 
 
+def normalize_pdf_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+# Home endpoint
 @app.get("/")
 def home():
     return {
@@ -108,12 +193,17 @@ def home():
     }
 
 
+# Health endpoint
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
 
-@app.post("/api/prompt")
+# Prompt endpoint - updated for Day 9
+@app.post(
+    "/api/prompt",
+    response_model=PromptResponse,
+)
 def submit_prompt(request: PromptRequest):
     prompt = request.prompt.strip()
 
@@ -124,22 +214,56 @@ def submit_prompt(request: PromptRequest):
         )
 
     request_id = str(uuid4())
-    result = run_prompt(prompt, request_id)
 
+    try:
+        result = run_prompt(prompt, request_id)
+
+    except Exception as exc:
+        logger.exception("Prompt processing failed")
+
+        raise HTTPException(
+            status_code=500,
+            detail="Prompt processing failed",
+        ) from exc
+
+    # Surface worker failures as HTTP 500
+    if result.get("status") != "completed":
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("error") or "Worker failed",
+        )
+
+    return PromptResponse(
+        request_id=result.get("request_id", request_id),
+        status=result["status"],
+        prompt=prompt,
+        response=result.get("response"),
+        cache=result.get("cache", "miss"),
+        error=result.get("error"),
+    )
+
+
+# Memory grid statistics
+@app.get("/api/grid/stats")
+def grid_stats():
     return {
-        "request_id": result["request_id"],
-        "status": result["status"],
-        "prompt": prompt,
-        "response": result["response"],
-        "cache": result.get("cache", "miss"),
+        "nodes": grid.stats(),
+        "cache_hits": cache_metrics["hits"],
+        "cache_misses": cache_metrics["misses"],
     }
 
 
-@app.get("/api/grid/stats")
-def grid_stats():
-    return {"nodes": [node.stats() for node in nodes]}
+@app.post("/api/grid/clear", status_code=200)
+def grid_clear():
+    for node in grid.nodes:
+        node.clear()
+
+    cache_metrics["hits"] = 0
+    cache_metrics["misses"] = 0
+    return {"status": "cleared", "nodes": len(grid.nodes)}
 
 
+# PDF date extraction endpoint
 @app.post("/api/pdf/today")
 async def extract_today_pdf_matches(
     file: UploadFile = File(...),
@@ -155,16 +279,13 @@ async def extract_today_pdf_matches(
     file_bytes = await file.read()
     text = extract_pdf_text(file_bytes)
     normalized_text = normalize_pdf_text(text)
-
     request_id = str(uuid4())
-    cache_key = f"pdf:{file.filename}:{request_id}"
-    node = nodes[router.route(cache_key)]
-    node.set(cache_key, normalized_text)
+    grid.set(f"pdf:{file.filename}:{request_id}", normalized_text)
 
     matches = find_today_date_matches(
-      normalized_text,
-      day=day,
-      month=month.lower(),
+        normalized_text,
+        day=day,
+        month=month.lower(),
     )
 
     return {
@@ -177,8 +298,3 @@ async def extract_today_pdf_matches(
             "Only the requested date has been extracted."
         ),
     }
-
-
-def normalize_pdf_text(text: str) -> str:
-    """Normalize extracted PDF text for consistent grid storage."""
-    return re.sub(r"\s+", " ", text).strip()

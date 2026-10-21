@@ -14,6 +14,8 @@ import StatusAndLoading from './components/StatusAndLoading';
 import ResponsePanel from './components/ResponsePanel';
 import RequestHistory from './components/RequestHistory';
 
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+
 export default function App() {
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -46,7 +48,7 @@ export default function App() {
         setLoadingStep('Dispatching inference to active memory grid nodes...');
       }, 350);
 
-      const res = await fetch('/api/prompt', {
+      const res = await fetch(`${API_URL}/api/prompt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -117,7 +119,7 @@ export default function App() {
       // Helpful error message if backend is not started or connection is refused
       if (err.name === 'TypeError' && (err.message.includes('fetch') || err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
         setError(
-          'Backend API is currently unreachable at http://localhost:8000/api/prompt. Ensure the FastAPI backend server is running, or verify your network connection.'
+          `Backend API is unreachable at ${API_URL || 'the configured API proxy'}/api/prompt. Ensure the FastAPI backend server is running, or verify your network connection.`
         );
       } else {
         setError(err.message || 'An unexpected error occurred while communicating with the inference grid.');

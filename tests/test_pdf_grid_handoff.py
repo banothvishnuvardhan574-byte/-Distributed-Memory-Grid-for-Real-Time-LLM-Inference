@@ -41,10 +41,9 @@ def test_pdf_text_is_normalized_and_stored_in_grid(monkeypatch):
     normalized_text = "Project review 11/oct status update."
     cache_key = next(
         key
-        for node in main.nodes
+        for node in main.grid.nodes
         for key in node.store
         if key.startswith("pdf:sample.pdf:")
     )
-    node = main.nodes[main.router.route(cache_key)]
 
-    assert node.get(cache_key) == normalized_text
+    assert main.grid.get(cache_key) == normalized_text

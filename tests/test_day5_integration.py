@@ -23,3 +23,23 @@ def test_prompt_roundtrip_uses_grid_cache_and_worker():
 
 def test_grid_stats_reports_configured_nodes():
     assert len(grid_stats()["nodes"]) == settings.node_count
+
+
+
+def test_prompt_returns_failure_when_worker_fails(monkeypatch):
+    import app.main as main
+
+    def failing_process_prompt(request_id, prompt, inference_fn):
+        return {
+            "request_id": request_id,
+            "status": "failed",
+            "response": None,
+            "error": "Failed to process prompt",
+        }
+
+    monkeypatch.setattr(main, "process_prompt", failing_process_prompt)
+
+    response = main.submit_prompt(main.PromptRequest(prompt="failure test"))
+
+    assert response["status"] == "failed"
+    assert response["response"] is None

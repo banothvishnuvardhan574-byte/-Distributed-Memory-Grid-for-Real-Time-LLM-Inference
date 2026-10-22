@@ -43,6 +43,29 @@ def test_grid_stats_reports_configured_nodes():
     assert len(grid_stats()["nodes"]) == settings.node_count
 
 
+def test_grid_stats_reports_cache_hits_misses_and_hit_rate():
+    grid_clear()
+    prompt = f"cache metrics integration {uuid4()}"
+
+    initial_stats = grid_stats()
+    assert initial_stats["cache_hits"] == 0
+    assert initial_stats["cache_misses"] == 0
+    assert initial_stats["hit_rate"] == 0.0
+
+    assert submit_prompt(PromptRequest(prompt=prompt)).cache == "miss"
+    miss_stats = grid_stats()
+    assert miss_stats["cache_hits"] == 0
+    assert miss_stats["cache_misses"] == 1
+    assert miss_stats["hit_rate"] == 0.0
+
+    assert submit_prompt(PromptRequest(prompt=prompt)).cache == "hit"
+    hit_stats = grid_stats()
+    assert hit_stats["cache_hits"] == 1
+    assert hit_stats["cache_misses"] == 1
+    assert hit_stats["hit_rate"] == 0.5
+
+    grid_clear()
+
 
 
 

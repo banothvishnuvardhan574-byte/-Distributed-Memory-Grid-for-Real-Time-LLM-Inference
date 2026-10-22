@@ -2,6 +2,7 @@ import io
 import logging
 import re
 from calendar import month_abbr, month_name
+from datetime import date
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -11,8 +12,6 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
 from worker.worker import process_prompt
-
-
 
 try:
     from pypdf import PdfReader
@@ -93,11 +92,11 @@ def run_prompt(prompt: str, request_id: str) -> dict:
             "error": None,
         }
 
-    cache_metrics["misses"] += 1
     result = process_prompt(request_id, prompt, stub_inference)
 
     if result.get("status") == "completed":
         grid.set(prompt, result["response"])
+        cache_metrics["misses"] += 1
         result["cache"] = "miss"
 
     return result
@@ -106,9 +105,14 @@ def run_prompt(prompt: str, request_id: str) -> dict:
 # Find sentences containing a requested date
 def find_today_date_matches(
     text: str,
-    day: int = 11,
-    month: str = "oct",
+    day: int | None = None,
+    month: str | None = None,
 ) -> list[str]:
+    today = date.today()
+    if day is None:
+        day = today.day
+    if month is None:
+        month = month_abbr[today.month]
     month = month.strip().lower()
     if not text or not month:
         return []
@@ -246,10 +250,14 @@ def submit_prompt(request: PromptRequest):
 # Memory grid statistics
 @app.get("/api/grid/stats")
 def grid_stats():
+    hits = cache_metrics["hits"]
+    misses = cache_metrics["misses"]
+    total_requests = hits + misses
     return {
         "nodes": grid.stats(),
-        "cache_hits": cache_metrics["hits"],
-        "cache_misses": cache_metrics["misses"],
+        "cache_hits": hits,
+        "cache_misses": misses,
+        "hit_rate": hits / total_requests if total_requests else 0.0,
     }
 
 
@@ -267,8 +275,8 @@ def grid_clear():
 @app.post("/api/pdf/today")
 async def extract_today_pdf_matches(
     file: UploadFile = File(...),
-    day: int = Form(11),
-    month: str = Form("oct"),
+    day: int | None = Form(None),
+    month: str | None = Form(None),
 ):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -282,10 +290,15 @@ async def extract_today_pdf_matches(
     request_id = str(uuid4())
     grid.set(f"pdf:{file.filename}:{request_id}", normalized_text)
 
+    today = date.today()
+    day = day if day is not None else today.day
+    month = (
+        month if month is not None else month_abbr[today.month]
+    ).strip().lower()
     matches = find_today_date_matches(
         normalized_text,
         day=day,
-        month=month.lower(),
+        month=month,
     )
 
     return {

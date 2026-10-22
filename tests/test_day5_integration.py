@@ -2,6 +2,8 @@
 from uuid import uuid4
 
 from app.core.config import settings
+import pytest
+from fastapi import HTTPException
 
 from app.main import (
     PromptRequest,
@@ -39,6 +41,30 @@ def test_prompt_roundtrip_uses_grid_cache_and_worker():
 
 def test_grid_stats_reports_configured_nodes():
     assert len(grid_stats()["nodes"]) == settings.node_count
+
+
+
+
+
+def test_prompt_returns_failure_when_worker_fails(monkeypatch):
+    import app.main as main
+
+    def failing_process_prompt(request_id, prompt, inference_fn):
+        return {
+            "request_id": request_id,
+            "status": "failed",
+            "response": None,
+            "error": "Failed to process prompt",
+        }
+
+    monkeypatch.setattr(main, "process_prompt", failing_process_prompt)
+
+    with pytest.raises(HTTPException) as exc_info:
+        main.submit_prompt(main.PromptRequest(prompt="failure test"))
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Failed to process prompt"
+
 
 
 def test_grid_clear():

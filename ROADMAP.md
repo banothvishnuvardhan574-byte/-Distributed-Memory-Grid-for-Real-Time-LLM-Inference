@@ -10,4 +10,4 @@
 - [x] Day 8 - MemoryGrid manager
 - [x] Day 9 - Harden grid eviction and TTL, test PDF edge cases,
 - [x] Day 10 - Code review round 1 + integration checkpoint: every module verified working together on main, first real bugs fixed.
-
+- [x] Day 11 - Dynamic PDF dates, cache metrics, worker error coverage, and project documentation.

@@ -24,9 +24,12 @@
 - Live API smoke checks passed for `/health`, prompt miss/hit, `/api/grid/stats`
   (1 hit, 1 miss, 0.5 hit rate), and PDF upload with today's date.
 - Teammate PR review: no open pull requests were available when checked.
+- Day 11 branch pushed. PR creation is pending GitHub sign-in in the integrated
+  browser: <https://github.com/banothvishnuvardhan574-byte/-Distributed-Memory-Grid-for-Real-Time-LLM-Inference/compare/main...member1-day11>.
 
 ## Follow-up
 
 - Replace the deprecated FastAPI startup event handler with a lifespan
   handler in a follow-up change.
-- Push this branch and open a PR against `main`; request review before merging.
+- Open the PR against `main` from the compare link above and request review
+  before merging.

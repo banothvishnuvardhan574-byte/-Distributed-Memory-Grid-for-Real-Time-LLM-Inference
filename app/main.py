@@ -59,7 +59,10 @@ class PromptResponse(BaseModel):
 
 
 # Initialize memory grid
-grid = MemoryGrid(node_count=settings.node_count)
+grid = MemoryGrid(
+    node_count=settings.node_count,
+    capacity_per_node=settings.cache_size_per_node,
+)
 cache_metrics = {"hits": 0, "misses": 0}
 
 
@@ -245,6 +248,16 @@ def submit_prompt(request: PromptRequest):
         cache=result.get("cache", "miss"),
         error=result.get("error"),
     )
+
+
+# Memory grid configuration
+@app.get("/api/grid/config")
+def grid_config():
+    return {
+        "node_count": settings.node_count,
+        "cache_size_per_node": settings.cache_size_per_node,
+        "default_ttl_seconds": settings.default_ttl_seconds,
+    }
 
 
 # Memory grid statistics

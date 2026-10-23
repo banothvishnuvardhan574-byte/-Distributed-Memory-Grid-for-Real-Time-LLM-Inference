@@ -324,3 +324,10 @@ async def extract_today_pdf_matches(
             "Only the requested date has been extracted."
         ),
     }
+@app.get("/api/grid/config")
+def grid_config():
+    return {
+        "node_count": settings.node_count,
+        "cache_size_per_node": settings.cache_size_per_node,
+        "default_ttl_seconds": settings.default_ttl_seconds,
+    }

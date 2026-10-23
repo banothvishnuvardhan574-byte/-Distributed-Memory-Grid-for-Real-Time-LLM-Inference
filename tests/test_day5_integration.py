@@ -109,3 +109,46 @@ def test_grid_clear():
     assert stats["cache_misses"] == 0
     assert all(node["entries"] == 0 for node in stats["nodes"])
     assert all(len(node.policy) == 0 for node in grid.nodes)
+
+
+    
+def test_prompt_reprocesses_after_cached_response_expires(monkeypatch):
+    import app.main as main
+    import app.grid.memory_node as memory_node
+
+    now = [100.0]
+    monkeypatch.setattr(memory_node.time, "time", lambda: now[0])
+
+    calls = []
+
+    def fake_process_prompt(request_id, prompt, inference_fn):
+        calls.append(prompt)
+        return {
+            "request_id": request_id,
+            "status": "completed",
+            "response": f"response-{len(calls)}",
+            "error": None,
+        }
+
+    monkeypatch.setattr(main, "process_prompt", fake_process_prompt)
+    monkeypatch.setattr(main.settings, "default_ttl_seconds", 5)
+
+    main.grid_clear()
+    prompt = f"ttl regression {uuid4()}"
+
+    first = main.run_prompt(prompt, "request-1")
+    second = main.run_prompt(prompt, "request-2")
+
+    assert first["cache"] == "miss"
+    assert second["cache"] == "hit"
+    assert second["response"] == first["response"]
+    assert len(calls) == 1
+
+    now[0] = 105.0
+
+    third = main.run_prompt(prompt, "request-3")
+
+    assert third["cache"] == "miss"
+    assert third["response"] == "response-2"
+    assert len(calls) == 2
+

@@ -26,5 +26,8 @@ class LRUPolicy:
         """Forget a key, for example on TTL expiry or manual delete."""
         self.order.pop(key, None)
 
+    def clear(self) -> None:
+        self.order.clear()
+
     def __len__(self) -> int:
         return len(self.order)

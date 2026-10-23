@@ -250,6 +250,16 @@ def submit_prompt(request: PromptRequest):
     )
 
 
+# Memory grid configuration
+@app.get("/api/grid/config")
+def grid_config():
+    return {
+        "node_count": settings.node_count,
+        "cache_size_per_node": settings.cache_size_per_node,
+        "default_ttl_seconds": settings.default_ttl_seconds,
+    }
+
+
 # Memory grid statistics
 @app.get("/api/grid/stats")
 def grid_stats():

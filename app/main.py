@@ -59,7 +59,10 @@ class PromptResponse(BaseModel):
 
 
 # Initialize memory grid
-grid = MemoryGrid(node_count=settings.node_count)
+grid = MemoryGrid(
+    node_count=settings.node_count,
+    capacity_per_node=settings.cache_size_per_node,
+)
 cache_metrics = {"hits": 0, "misses": 0}
 
 

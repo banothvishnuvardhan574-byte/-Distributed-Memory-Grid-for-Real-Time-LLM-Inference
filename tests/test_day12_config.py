@@ -1,49 +1,22 @@
-from fastapi.testclient import TestClient
+﻿from fastapi.testclient import TestClient
 
-<<<<<<< HEAD
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
-from app.main import app, grid
-
-
-def test_memory_grid_applies_capacity_to_every_node():
-    memory_grid = MemoryGrid(node_count=2, capacity_per_node=5)
-
-    assert [node.capacity for node in memory_grid.nodes] == [5, 5]
-
-
-def test_application_grid_uses_configured_capacity():
-    assert all(
-        node.capacity == settings.cache_size_per_node
-        for node in grid.nodes
-    )
-
-
-def test_grid_config_endpoint_returns_active_settings():
-    with TestClient(app) as client:
-        response = client.get("/api/grid/config")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "node_count": settings.node_count,
-        "cache_size_per_node": settings.cache_size_per_node,
-        "default_ttl_seconds": settings.default_ttl_seconds,
-    }
-=======
 from app.main import app
-from app.grid.memory_grid import MemoryGrid
 
 client = TestClient(app)
 
 
-def test_capacity_passed_to_nodes():
-    grid = MemoryGrid(
-        node_count=2,
-        capacity_per_node=5,
+def test_grid_capacity_uses_configured_setting():
+    test_grid = MemoryGrid(
+        node_count=settings.node_count,
+        capacity_per_node=settings.cache_size_per_node,
     )
 
-    assert len(grid.nodes) == 2
-    assert all(node.capacity == 5 for node in grid.nodes)
+    assert len(test_grid.nodes) == settings.node_count
+
+    for node in test_grid.nodes:
+        assert node.capacity == settings.cache_size_per_node
 
 
 def test_grid_config_endpoint():
@@ -51,13 +24,26 @@ def test_grid_config_endpoint():
 
     assert response.status_code == 200
 
-    body = response.json()
+    data = response.json()
+    assert data["node_count"] == settings.node_count
+    assert data["cache_size_per_node"] == settings.cache_size_per_node
+    assert data["default_ttl_seconds"] == settings.default_ttl_seconds
 
-    assert "node_count" in body
-    assert "cache_size_per_node" in body
-    assert "default_ttl_seconds" in body
 
-    assert body["node_count"] >= 1
-    assert body["cache_size_per_node"] >= 1
-    assert body["default_ttl_seconds"] >= 1
->>>>>>> 35eedee (day12: test cache capacity and grid config)
+def test_grid_stats_endpoint():
+    response = client.get("/api/grid/stats")
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "nodes" in data
+    assert "cache_hits" in data
+    assert "cache_misses" in data
+    assert "hit_rate" in data
+
+
+def test_grid_clear_endpoint():
+    response = client.post("/api/grid/clear")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cleared"

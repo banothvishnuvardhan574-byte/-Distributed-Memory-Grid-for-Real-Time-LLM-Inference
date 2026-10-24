@@ -7,7 +7,9 @@ from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+class PromptRequest(BaseModel):
+    prompt: str = Field(..., max_length=4000)
 
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
@@ -45,7 +47,7 @@ app.add_middleware(
 
 # Request model
 class PromptRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(..., max_length=4000)
 
 
 # Response model - Day 9

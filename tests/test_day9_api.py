@@ -24,7 +24,7 @@ def test_prompt_response_model_is_published_in_openapi():
 
 def test_empty_prompt_returns_bad_request():
     with pytest.raises(HTTPException) as exc_info:
-        main.submit_prompt(main.PromptRequest(prompt=""))
+        main.submit_prompt(main.PromptRequest(prompt=" "))
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Prompt cannot be empty"

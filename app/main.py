@@ -301,7 +301,7 @@ async def extract_today_pdf_matches(
     text = extract_pdf_text(file_bytes)
     normalized_text = normalize_pdf_text(text)
     request_id = str(uuid4())
-    grid.set(f"pdf:{file.filename}:{request_id}", normalized_text)
+    grid.set(f"pdf:{file.filename}:{request_id}", normalized_text, ttl=60)
 
     today = date.today()
     day = day if day is not None else today.day

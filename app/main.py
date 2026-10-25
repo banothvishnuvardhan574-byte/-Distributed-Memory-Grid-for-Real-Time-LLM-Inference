@@ -1,3 +1,4 @@
+
 import io
 import logging
 import re
@@ -8,9 +9,17 @@ from uuid import uuid4
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+ member1-day13-capacity-fix
 member1-day13-capacity-fix
 class PromptRequest(BaseModel):
     prompt: str = Field(..., max_length=4000) main
+
+ member1-day15-bugfix
+
+class PromptRequest(BaseModel):
+    prompt: str = Field(..., max_length=4000)
+ main
+ main
 
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
@@ -46,7 +55,13 @@ app.add_middleware(
 )
 
 
+ member1-day13-capacity-fix
 # Request model with validation
+
+# Request model
+# Do not set min_length=1 here.
+# Empty prompts must reach the endpoint so it can return HTTP 400.
+ main
 class PromptRequest(BaseModel):
     prompt: str = Field(..., max_length=4000)
 
@@ -127,7 +142,7 @@ def find_today_date_matches(
     text: str,
     day: int | None = None,
     month: str | None = None,
-) -> list[str]:
+)  list[str]:
     today = date.today()
 
     if day is None:
@@ -145,8 +160,11 @@ def find_today_date_matches(
         (
             index
             for index in range(1, 13)
+ member1-day13-capacity-fix
             if month
             in (
+           if month in (
+             main
                 month_abbr[index].lower(),
                 month_name[index].lower(),
             )
@@ -166,7 +184,15 @@ def find_today_date_matches(
 
     month_pattern = "(?:" + "|".join(
         re.escape(name)
+ member1-day13-capacity-fix
         for name in sorted(month_names, key=len, reverse=True)
+
+        for name in sorted(
+            month_names,
+            key=len,
+            reverse=True,
+        )
+ main
     ) + ")"
 
     day_pattern = rf"{day}(?:st|nd|rd|th)?"
@@ -245,7 +271,11 @@ def extract_pdf_text(file_bytes: bytes) -> str:
         ) from exc
 
 
+ member1-day13-capacity-fix
 # Normalize PDF text
+
+# Normalize extracted PDF text
+main
 def normalize_pdf_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
@@ -273,7 +303,10 @@ def health_check():
 def submit_prompt(request: PromptRequest):
     prompt = request.prompt.strip()
 
-    # Reject whitespace-only prompts
+member1-day13-capacity-fix
+
+    # Return HTTP 400 for empty or whitespace-only prompts.
+ main
     if not prompt:
         raise HTTPException(
             status_code=400,
@@ -283,7 +316,10 @@ def submit_prompt(request: PromptRequest):
     request_id = str(uuid4())
 
     try:
-        result = run_prompt(prompt, request_id)
+        result = run_prompt(
+            prompt,
+            request_id,
+        )
 
     except Exception as exc:
         logger.exception("Prompt processing failed")
@@ -293,7 +329,7 @@ def submit_prompt(request: PromptRequest):
             detail="Prompt processing failed",
         ) from exc
 
-    # Surface worker failures as HTTP 500
+    # Surface worker failures as HTTP 500.
     if result.get("status") != "completed":
         raise HTTPException(
             status_code=500,
@@ -310,9 +346,13 @@ def submit_prompt(request: PromptRequest):
     )
 
 
+member1-day13-capacity-fix
 # Memory grid configuration endpoint
 @app.get("/api/grid/config")
 def grid_config():
+#  Memory grid configuration helper
+def get_grid_config() -> dict:
+ main
     return {
         "node_count": settings.node_count,
         "cache_size_per_node": settings.cache_size_per_node,
@@ -320,6 +360,15 @@ def grid_config():
     }
 
 
+ member1-day13-capacity-fix
+
+# Memory grid configuration endpoint
+@app.get("/api/grid/config")
+def grid_config():
+    return get_grid_config()
+
+
+main
 # Memory grid statistics endpoint
 @app.get("/api/grid/stats")
 def grid_stats():
@@ -339,7 +388,10 @@ def grid_stats():
     }
 
 
+ member1-day13-capacity-fix
 # Clear memory grid and reset metrics
+# Clear memory grid and reset cache metrics
+ main
 @app.post("/api/grid/clear", status_code=200)
 def grid_clear():
     for node in grid.nodes:
@@ -371,14 +423,22 @@ async def extract_today_pdf_matches(
         )
 
     file_bytes = await file.read()
+
     text = extract_pdf_text(file_bytes)
     normalized_text = normalize_pdf_text(text)
 
     request_id = str(uuid4())
+member1-day13-capacity-fix
 
     # Cache extracted PDF text for 60 seconds
     pdf_cache_key = f"pdf:{file.filename}:{request_id}"
 
+
+    pdf_cache_key = f"pdf:{file.filename}:{request_id}"
+
+    # Cache the extracted PDF text for 60 seconds.
+    # This assumes MemoryGrid.set supports the ttl keyword.
+ main
     grid.set(
         pdf_cache_key,
         normalized_text,
@@ -387,6 +447,7 @@ async def extract_today_pdf_matches(
 
     today = date.today()
 
+ member1-day13-capacity-fix
     if day is None:
         day = today.day
 
@@ -395,19 +456,37 @@ async def extract_today_pdf_matches(
 
     month = month.strip().lower()
 
+    target_day = day if day is not None else today.day
+
+    target_month = (
+        month
+        if month is not None
+        else month_abbr[today.month]
+    ).strip().lower()
+ main
+
     matches = find_today_date_matches(
         normalized_text,
-        day=day,
-        month=month,
+        day=target_day,
+        month=target_month,
     )
 
     return {
         "file_name": file.filename,
+ member1-day13-capacity-fix
         "target_date": f"{day}/{month}",
+
+        "target_date": f"{target_day}/{target_month}",
+main
         "matches_found": len(matches),
         "matches": matches[:10],
         "message": (
             "Small PDF check complete. "
             "Only the requested date has been extracted."
         ),
+ member1-day13-capacity-fix
     }
+
+    }
+
+ main

@@ -12,20 +12,30 @@ def test_capacity_applied_to_nodes():
     assert all(node.capacity == 5 for node in grid.nodes)
 
 
-def test_empty_prompt_rejected():
-    response = client.post("/api/prompt", json={"prompt": ""})
+def test_empty_prompt_returns_400():
+    response = client.post(
+        "/api/prompt",
+        json={"prompt": ""},
+    )
+
+    assert response.status_code == 400
+
+
+def test_oversized_prompt_returns_422():
+    response = client.post(
+        "/api/prompt",
+        json={"prompt": "a" * 4001},
+    )
 
     assert response.status_code == 422
 
 
-def test_oversized_prompt_rejected():
-    response = client.post("/api/prompt", json={"prompt": "x" * 5000})
-
-    assert response.status_code == 422
-
-
-def test_valid_prompt_accepted():
-    response = client.post("/api/prompt", json={"prompt": "day13 check"})
+def test_valid_prompt_returns_200():
+    response = client.post(
+        "/api/prompt",
+        json={"prompt": "Hello MemoryGrid"},
+    )
 
     assert response.status_code == 200
+    assert response.json()["status"] == "completed"
     assert response.json()["cache"] in {"hit", "miss"}

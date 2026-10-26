@@ -33,6 +33,24 @@ python -m uvicorn app.main:app --reload
 The backend listens at <http://127.0.0.1:8000>. Interactive API documentation
 is available at <http://127.0.0.1:8000/docs>.
 
+## Start the full stack
+
+Install the frontend dependencies once:
+
+```bash
+npm --prefix frontend install
+```
+
+With the Python virtual environment active, run this from the repository root
+in Git Bash or WSL:
+
+```bash
+bash run_dev.sh
+```
+
+The script starts the API on port `8000` and the Vite frontend on port `5173`.
+Press `Ctrl+C` to stop both development servers.
+
 ## API endpoints
 
 | Method | Endpoint | Description |
@@ -71,5 +89,5 @@ npm install
 npm run dev
 ```
 
-The Vite development server runs at <http://localhost:3000> and proxies API
+The Vite development server runs at <http://localhost:5173> and proxies API
 requests to the backend at `http://localhost:8000`.

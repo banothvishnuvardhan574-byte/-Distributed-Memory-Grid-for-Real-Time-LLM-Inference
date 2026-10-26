@@ -8,7 +8,15 @@ from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field member1-day15-fix-merge
+
+ member
+  1-day15-bugfix
+
+class PromptRequest(BaseModel):
+    prompt: str = Field(..., max_length=4000)
+ main
+ main
 
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
@@ -43,6 +51,7 @@ app.add_middleware(
 )
 
 
+ member1-day15-fix-merge
 # --------------------------------------------------
 # Request and response models
 # --------------------------------------------------
@@ -53,6 +62,16 @@ class PromptRequest(BaseModel):
     prompt: str = Field(..., max_length=4000)
 
 
+
+# Request model
+# Do not set min_length=1 here.
+# Empty prompts must reach the endpoint so it can return HTTP 400.
+class PromptRequest(BaseModel):
+    prompt: str = Field(..., max_length=4000)
+
+
+# Response model
+ main
 class PromptResponse(BaseModel):
     request_id: str
     status: str
@@ -241,12 +260,16 @@ def extract_pdf_text(file_bytes: bytes) -> str:
     if PdfReader is None:
         raise HTTPException(
             status_code=500,
-            detail="PDF support is not installed. Please install pypdf.",
+            detail=(
+                "PDF support is not installed. "
+                "Please install pypdf."
+            ),
         )
 
     try:
         reader = PdfReader(io.BytesIO(file_bytes))
 
+ member1-day15-fix-merge
         if reader.is_encrypted:
             try:
                 if not reader.decrypt(""):
@@ -262,6 +285,7 @@ def extract_pdf_text(file_bytes: bytes) -> str:
                     detail="Unable to read encrypted PDF.",
                 ) from exc
 
+ main
         return "\n".join(
             page.extract_text() or ""
             for page in reader.pages
@@ -276,6 +300,7 @@ def extract_pdf_text(file_bytes: bytes) -> str:
         ) from exc
 
 
+# Normalize extracted PDF text
 def normalize_pdf_text(text: str) -> str:
     """Normalize whitespace in extracted PDF text."""
     return re.sub(r"\s+", " ", text).strip()
@@ -298,10 +323,13 @@ def health_check():
     return {"status": "ok"}
 
 
+ member1-day15-fix-merge
 # --------------------------------------------------
 # Prompt endpoint
 # --------------------------------------------------
 
+
+ main
 @app.post(
     "/api/prompt",
     response_model=PromptResponse,
@@ -309,6 +337,7 @@ def health_check():
 def submit_prompt(request: PromptRequest):
     prompt = request.prompt.strip()
 
+    # Return HTTP 400 for empty or whitespace-only prompts.
     if not prompt:
         raise HTTPException(
             status_code=400,
@@ -318,7 +347,10 @@ def submit_prompt(request: PromptRequest):
     request_id = str(uuid4())
 
     try:
-        result = run_prompt(prompt, request_id)
+        result = run_prompt(
+            prompt,
+            request_id,
+        )
 
     except Exception as exc:
         logger.exception("Prompt processing failed")
@@ -328,6 +360,10 @@ def submit_prompt(request: PromptRequest):
             detail="Prompt processing failed",
         ) from exc
 
+ member1-day15-fix-merge
+
+    # Surface worker failures as HTTP 500.
+ main
     if result.get("status") != "completed":
         raise HTTPException(
             status_code=500,
@@ -344,12 +380,17 @@ def submit_prompt(request: PromptRequest):
     )
 
 
+ member1-day15-fix-merge
 # --------------------------------------------------
 # Grid configuration and statistics
 # --------------------------------------------------
 
 @app.get("/api/grid/config")
 def grid_config():
+
+# Memory grid configuration helper
+def get_grid_config() -> dict:
+ main
     return {
         "node_count": settings.node_count,
         "cache_size_per_node": settings.cache_size_per_node,
@@ -357,6 +398,15 @@ def grid_config():
     }
 
 
+
+# Memory grid configuration endpoint
+@app.get("/api/grid/config")
+def grid_config():
+    return get_grid_config()
+
+
+# Memory grid statistics endpoint
+ main
 @app.get("/api/grid/stats")
 def grid_stats():
     hits = cache_metrics["hits"]
@@ -375,6 +425,7 @@ def grid_stats():
     }
 
 
+# Clear memory grid and reset cache metrics
 @app.post("/api/grid/clear", status_code=200)
 def grid_clear():
     for node in grid.nodes:
@@ -382,6 +433,14 @@ def grid_clear():
 
     cache_metrics["hits"] = 0
     cache_metrics["misses"] = 0
+ member1-day15-fix-merge
+
+
+    return {
+        "status": "cleared",
+        "nodes": len(grid.nodes),
+    }
+ main
 
     return {
         "status": "cleared",
@@ -399,27 +458,54 @@ async def extract_today_pdf_matches(
     day: int | None = Form(None),
     month: str | None = Form(None),
 ):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
+    if (
+        not file.filename
+        or not file.filename.lower().endswith(".pdf")
+    ):
         raise HTTPException(
             status_code=400,
             detail="Please upload a PDF file.",
         )
 
     file_bytes = await file.read()
+
     text = extract_pdf_text(file_bytes)
     normalized_text = normalize_pdf_text(text)
+ member1-day15-fix-merge
+
+
+    request_id = str(uuid4())
+    pdf_cache_key = f"pdf:{file.filename}:{request_id}"
+
+    # Cache the extracted PDF text for 60 seconds.
+    # This assumes MemoryGrid.set supports the ttl keyword.
+    grid.set(
+        pdf_cache_key,
+        normalized_text,
+        ttl=60,
+    )
+ main
 
     today = date.today()
 
     target_day = day if day is not None else today.day
+ member1-day15-fix-merge
     target_month = (
         month if month is not None else month_abbr[today.month]
+
+
+    target_month = (
+        month
+        if month is not None
+        else month_abbr[today.month]
+ main
     ).strip().lower()
 
     matches = find_today_date_matches(
         normalized_text,
         day=target_day,
         month=target_month,
+ member1-day15-fix-merge
     )
 
     # Cache PDF text for 60 seconds.
@@ -430,6 +516,8 @@ async def extract_today_pdf_matches(
         pdf_cache_key,
         normalized_text,
         ttl=60,
+
+ main
     )
 
     return {
@@ -442,3 +530,7 @@ async def extract_today_pdf_matches(
             "Only the requested date has been extracted."
         ),
     }
+ member1-day15-fix-merge
+
+
+ main

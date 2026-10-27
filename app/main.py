@@ -2,11 +2,12 @@
 import io
 import logging
 import re
+import time
 from calendar import month_abbr, month_name
 from datetime import date
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -32,6 +33,21 @@ app = FastAPI(
     description="Backend API for real-time LLM inference",
     version=settings.version,
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next) -> Response:
+    start = time.time()
+    response = await call_next(request)
+    logger.info(
+        "%s %s -> %s (%.1fms)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        (time.time() - start) * 1000,
+    )
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -354,6 +370,17 @@ def grid_config():
         "node_count": settings.node_count,
         "cache_size_per_node": settings.cache_size_per_node,
         "default_ttl_seconds": settings.default_ttl_seconds,
+    }
+
+
+@app.get("/api/grid/health")
+def grid_health():
+    stats = grid.stats()
+    return {
+        "status": "healthy",
+        "node_count": len(stats),
+        "total_cached_entries": sum(node["entries"] for node in stats),
+        "capacity_per_node": settings.cache_size_per_node,
     }
 
 

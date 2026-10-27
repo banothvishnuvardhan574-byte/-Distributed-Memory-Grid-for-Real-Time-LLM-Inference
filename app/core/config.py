@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     node_count: int = 4
     cache_size_per_node: int = 1000
     default_ttl_seconds: int = 300
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
     model_config = SettingsConfigDict(
         env_file=".env",

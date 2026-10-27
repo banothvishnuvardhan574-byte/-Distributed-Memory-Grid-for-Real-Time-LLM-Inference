@@ -36,6 +36,7 @@ def test_worker_module_success_when_available():
         "request_id": "123",
         "status": "completed",
         "response": "Hello back!",
+        "error": None,
     }
 
 
@@ -73,6 +74,7 @@ def test_process_prompt_rejects_empty_prompt():
         )
 
 
+
 def test_process_prompt_handles_inference_error():
     result = process_prompt(
         request_id="999",
@@ -81,9 +83,12 @@ def test_process_prompt_handles_inference_error():
         timeout_seconds=20,
     )
 
-    assert result["request_id"] == "999"
-    assert result["status"] == "failed"
-    assert result["response"] == "Failed to process prompt"
+    assert result == {
+        "request_id": "999",
+        "status": "failed",
+        "response": None,
+        "error": "Failed to process prompt",
+    }
 
 
 def test_process_prompt_handles_timeout():
@@ -94,9 +99,12 @@ def test_process_prompt_handles_timeout():
         timeout_seconds=0.1,
     )
 
-    assert result["request_id"] == "timeout-001"
-    assert result["status"] == "failed"
-    assert result["response"] == "Inference timed out"
+    assert result == {
+        "request_id": "timeout-001",
+        "status": "failed",
+        "response": None,
+        "error": "Inference timed out",
+    }
 
 
 def test_process_prompt_rejects_invalid_timeout():

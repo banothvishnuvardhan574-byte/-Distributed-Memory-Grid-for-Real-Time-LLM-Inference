@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Paper,
   Box,
@@ -10,6 +10,7 @@ import {
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import FingerprintRoundedIcon from '@mui/icons-material/FingerprintRounded';
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
 
 /**
@@ -18,9 +19,17 @@ import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlin
  * actual API responses; nothing is fabricated or simulated.
  */
 export default function RequestHistory({ history = [] }) {
+  const [copiedId, setCopiedId] = useState(null);
+
   const handleCopyId = (id) => {
-    if (!id) return;
-    navigator.clipboard.writeText(id);
+    if (!id || id === 'N/A') return;
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(id).catch(() => {});
+    }
+    setCopiedId(id);
+    setTimeout(() => {
+      setCopiedId((curr) => (curr === id ? null : curr));
+    }, 2000);
   };
 
   if (history.length === 0) {
@@ -31,18 +40,58 @@ export default function RequestHistory({ history = [] }) {
         sx={{
           p: 2.5,
           borderRadius: 3,
-          textAlign: 'center',
           backgroundColor: 'rgba(15, 23, 42, 0.45)',
-          border: '1px dashed rgba(255, 255, 255, 0.1)',
+          border: '1px dashed rgba(255, 255, 255, 0.12)',
         }}
       >
-        <HistoryRoundedIcon sx={{ fontSize: 28, color: '#475569', mb: 1 }} />
-        <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
-          No requests yet
-        </Typography>
-        <Typography variant="caption" sx={{ color: '#475569', display: 'block', mt: 0.5 }}>
-          Submitted prompts will appear here during this session.
-        </Typography>
+        <Box sx={{ textAlign: 'center', mb: 2 }}>
+          <Box
+            sx={{
+              display: 'inline-flex',
+              p: 1.25,
+              borderRadius: '50%',
+              backgroundColor: 'rgba(99, 102, 241, 0.08)',
+              mb: 1,
+            }}
+          >
+            <HistoryRoundedIcon sx={{ fontSize: 28, color: '#818cf8' }} />
+          </Box>
+          <Typography variant="subtitle2" sx={{ color: '#e2e8f0', fontWeight: 600 }}>
+            No Requests in This Session
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block', mt: 0.5, lineHeight: 1.5 }}>
+            Each prompt submission is acknowledged with a unique Request ID, status, and latency.
+          </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            p: 1.5,
+            borderRadius: 2,
+            backgroundColor: 'rgba(10, 13, 20, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              color: '#818cf8',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              fontSize: '0.65rem',
+              display: 'block',
+              mb: 1,
+            }}
+          >
+            What to do next:
+          </Typography>
+          <Box component="ol" sx={{ m: 0, pl: 2.5, color: '#94a3b8', fontSize: '0.75rem', lineHeight: 1.6 }}>
+            <li>Choose a quick test prompt or write your own.</li>
+            <li>Click <strong>Submit Prompt</strong> or press <strong>Ctrl+Enter</strong>.</li>
+            <li>Inspect or copy the returned Request ID from this panel.</li>
+          </Box>
+        </Box>
       </Paper>
     );
   }
@@ -125,6 +174,7 @@ export default function RequestHistory({ history = [] }) {
               <FingerprintRoundedIcon sx={{ color: '#a855f7', fontSize: 13 }} />
               <Typography
                 variant="caption"
+                title={entry.request_id || undefined}
                 sx={{
                   fontFamily: "'JetBrains Mono', monospace",
                   fontSize: '0.65rem',
@@ -140,17 +190,22 @@ export default function RequestHistory({ history = [] }) {
                 {entry.request_id ? entry.request_id.slice(0, 8) + '…' : 'N/A'}
               </Typography>
 
-              <Tooltip title="Copy full Request ID">
+              <Tooltip title={copiedId === entry.request_id ? 'Copied Request ID!' : 'Copy full Request ID'}>
                 <IconButton
                   size="small"
+                  aria-label={copiedId === entry.request_id ? `Request ID ${entry.request_id} copied to clipboard` : `Copy full Request ID ${entry.request_id || ''}`}
                   onClick={() => handleCopyId(entry.request_id)}
                   sx={{
                     p: 0.3,
-                    color: '#64748b',
-                    '&:hover': { color: '#c084fc' },
+                    color: copiedId === entry.request_id ? '#34d399' : '#64748b',
+                    '&:hover': { color: copiedId === entry.request_id ? '#34d399' : '#c084fc' },
                   }}
                 >
-                  <ContentCopyRoundedIcon sx={{ fontSize: 12 }} />
+                  {copiedId === entry.request_id ? (
+                    <CheckRoundedIcon sx={{ fontSize: 12 }} />
+                  ) : (
+                    <ContentCopyRoundedIcon sx={{ fontSize: 12 }} />
+                  )}
                 </IconButton>
               </Tooltip>
 

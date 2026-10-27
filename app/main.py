@@ -106,13 +106,31 @@ def home():
     }
 
 
-@app.get("/health")
 def health_check():
     return {"status": "ok"}
 
 
-@app.post("/api/prompt")
+@app.get("/health")
+def health_check_route():
+    return {"status": "healthy"}
+
+
 def submit_prompt(request: PromptRequest):
+    prompt = request.prompt.strip()
+
+    if not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="Prompt cannot be empty",
+        )
+
+    request_id = str(uuid4())
+    result = run_prompt(prompt, request_id)
+    return result
+
+
+@app.post("/api/prompt")
+def submit_prompt_route(request: PromptRequest):
     prompt = request.prompt.strip()
 
     if not prompt:
@@ -126,7 +144,7 @@ def submit_prompt(request: PromptRequest):
 
     return {
         "request_id": result["request_id"],
-        "status": result["status"],
+        "status": "accepted",
         "prompt": prompt,
         "response": result["response"],
         "cache": result.get("cache", "miss"),
@@ -164,9 +182,3 @@ async def extract_today_pdf_matches(
             "Only the requested date has been extracted."
         ),
     }
-from uuid import uuid4
-
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-
-from app.core.config import settings

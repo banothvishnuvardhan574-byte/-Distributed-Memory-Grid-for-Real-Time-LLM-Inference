@@ -29,6 +29,7 @@ def test_worker_module_success_when_available():
         request_id="123",
         prompt="Hello",
         inference_fn=successful_inference,
+        timeout_seconds=20,
     )
 
     assert result == {
@@ -43,6 +44,7 @@ def test_worker_module_failure_when_available():
         request_id="999",
         prompt="Hello",
         inference_fn=failing_inference,
+        timeout_seconds=20,
     )
 
     assert result["status"] == "failed"
@@ -55,6 +57,7 @@ def test_process_prompt_removes_extra_spaces():
         request_id="456",
         prompt="  Hello  ",
         inference_fn=echo_inference,
+        timeout_seconds=20,
     )
 
     assert result["response"] == "You said: Hello"
@@ -75,6 +78,7 @@ def test_process_prompt_handles_inference_error():
         request_id="999",
         prompt="Hello",
         inference_fn=failing_inference,
+        timeout_seconds=20,
     )
 
     assert result["request_id"] == "999"

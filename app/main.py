@@ -69,6 +69,7 @@ class PromptRequest(BaseModel):
     prompt: str = Field(..., max_length=4000)
 
 
+# Response model
 class PromptResponse(BaseModel):
     request_id: str
     status: str
@@ -257,7 +258,10 @@ def extract_pdf_text(file_bytes: bytes) -> str:
     if PdfReader is None:
         raise HTTPException(
             status_code=500,
-            detail="PDF support is not installed. Please install pypdf.",
+            detail=(
+                "PDF support is not installed. "
+                "Please install pypdf."
+            ),
         )
 
     try:
@@ -292,6 +296,7 @@ def extract_pdf_text(file_bytes: bytes) -> str:
         ) from exc
 
 
+# Normalize extracted PDF text
 def normalize_pdf_text(text: str) -> str:
     """Normalize whitespace in extracted PDF text."""
     return re.sub(r"\s+", " ", text).strip()
@@ -318,6 +323,7 @@ def health_check():
 # Prompt endpoint
 # --------------------------------------------------
 
+
 @app.post(
     "/api/prompt",
     response_model=PromptResponse,
@@ -325,6 +331,7 @@ def health_check():
 def submit_prompt(request: PromptRequest):
     prompt = request.prompt.strip()
 
+    # Return HTTP 400 for empty or whitespace-only prompts.
     if not prompt:
         raise HTTPException(
             status_code=400,
@@ -334,7 +341,10 @@ def submit_prompt(request: PromptRequest):
     request_id = str(uuid4())
 
     try:
-        result = run_prompt(prompt, request_id)
+        result = run_prompt(
+            prompt,
+            request_id,
+        )
 
     except Exception as exc:
         logger.exception("Prompt processing failed")
@@ -344,6 +354,7 @@ def submit_prompt(request: PromptRequest):
             detail="Prompt processing failed",
         ) from exc
 
+    # Surface worker failures as HTTP 500.
     if result.get("status") != "completed":
         raise HTTPException(
             status_code=500,
@@ -384,6 +395,7 @@ def grid_health():
     }
 
 
+# Memory grid statistics endpoint
 @app.get("/api/grid/stats")
 def grid_stats():
     hits = cache_metrics["hits"]
@@ -402,6 +414,7 @@ def grid_stats():
     }
 
 
+# Clear memory grid and reset cache metrics
 @app.post("/api/grid/clear", status_code=200)
 def grid_clear():
     for node in grid.nodes:
@@ -426,13 +439,17 @@ async def extract_today_pdf_matches(
     day: int | None = Form(None),
     month: str | None = Form(None),
 ):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
+    if (
+        not file.filename
+        or not file.filename.lower().endswith(".pdf")
+    ):
         raise HTTPException(
             status_code=400,
             detail="Please upload a PDF file.",
         )
 
     file_bytes = await file.read()
+
     text = extract_pdf_text(file_bytes)
     normalized_text = normalize_pdf_text(text)
 

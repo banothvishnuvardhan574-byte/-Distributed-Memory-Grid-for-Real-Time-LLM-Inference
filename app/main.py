@@ -2,18 +2,22 @@
 import io
 import logging
 import re
+import time
 from calendar import month_abbr, month_name
 from datetime import date
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+ member4-day13
 
 
 class PromptRequest(BaseModel):
     prompt: str = Field(..., max_length=4000)
 
+
+ main
 
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
@@ -25,12 +29,13 @@ except ImportError:
     PdfReader = None
 
 
-# Logging
+# --------------------------------------------------
+# Logging and application setup
+# --------------------------------------------------
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("memgrid")
 
-
-# FastAPI application
 app = FastAPI(
     title=settings.app_name,
     description="Backend API for real-time LLM inference",
@@ -38,7 +43,20 @@ app = FastAPI(
 )
 
 
-# CORS configuration
+@app.middleware("http")
+async def log_requests(request: Request, call_next) -> Response:
+    start = time.time()
+    response = await call_next(request)
+    logger.info(
+        "%s %s -> %s (%.1fms)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        (time.time() - start) * 1000,
+    )
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(
@@ -49,10 +67,13 @@ app.add_middleware(
 )
 
 
-# Request model
-# Do not set min_length=1 here.
-# Empty prompts must reach the endpoint so it can return HTTP 400.
+# --------------------------------------------------
+# Request and response models
+# --------------------------------------------------
+
 class PromptRequest(BaseModel):
+    # Keep max_length, but do not use min_length.
+    # Empty prompts must reach the endpoint and return HTTP 400.
     prompt: str = Field(..., max_length=4000)
 
 
@@ -66,7 +87,10 @@ class PromptResponse(BaseModel):
     error: str | None = None
 
 
-# Initialize memory grid
+# --------------------------------------------------
+# Memory grid and metrics
+# --------------------------------------------------
+
 grid = MemoryGrid(
     node_count=settings.node_count,
     capacity_per_node=settings.cache_size_per_node,
@@ -88,13 +112,17 @@ def startup():
     )
 
 
-# Stub inference function
+# --------------------------------------------------
+# Prompt processing
+# --------------------------------------------------
+
 def stub_inference(prompt: str) -> str:
+    """Fallback inference function used by the worker."""
     return f"[stub] echo: {prompt[:200]}"
 
 
-# Process prompt using memory grid and worker
 def run_prompt(prompt: str, request_id: str) -> dict:
+    """Return a cached response or invoke the worker."""
     cached = grid.get(prompt)
 
     if cached is not None:
@@ -114,6 +142,7 @@ def run_prompt(prompt: str, request_id: str) -> dict:
         stub_inference,
     )
 
+    # Count a miss only when inference succeeds.
     if result.get("status") == "completed":
         grid.set(prompt, result["response"])
         cache_metrics["misses"] += 1
@@ -122,12 +151,16 @@ def run_prompt(prompt: str, request_id: str) -> dict:
     return result
 
 
-# Find sentences containing a requested date
+# --------------------------------------------------
+# PDF date matching
+# --------------------------------------------------
+
 def find_today_date_matches(
     text: str,
     day: int | None = None,
     month: str | None = None,
 ) -> list[str]:
+    """Find sentences containing the requested day and month."""
     today = date.today()
 
     if day is None:
@@ -222,8 +255,14 @@ def find_today_date_matches(
     ]
 
 
-# Extract text from PDF
 def extract_pdf_text(file_bytes: bytes) -> str:
+    """Extract text from uploaded PDF bytes."""
+    if not file_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to read PDF content: uploaded PDF is empty.",
+        )
+
     if PdfReader is None:
         raise HTTPException(
             status_code=500,
@@ -236,11 +275,28 @@ def extract_pdf_text(file_bytes: bytes) -> str:
     try:
         reader = PdfReader(io.BytesIO(file_bytes))
 
+        if reader.is_encrypted:
+            try:
+                if not reader.decrypt(""):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Encrypted PDFs are not supported.",
+                    )
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Unable to read encrypted PDF.",
+                ) from exc
+
         return "\n".join(
             page.extract_text() or ""
             for page in reader.pages
         )
 
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -250,10 +306,14 @@ def extract_pdf_text(file_bytes: bytes) -> str:
 
 # Normalize extracted PDF text
 def normalize_pdf_text(text: str) -> str:
+    """Normalize whitespace in extracted PDF text."""
     return re.sub(r"\s+", " ", text).strip()
 
 
-# Home endpoint
+# --------------------------------------------------
+# Home and health endpoints
+# --------------------------------------------------
+
 @app.get("/")
 def home():
     return {
@@ -262,13 +322,16 @@ def home():
     }
 
 
-# Health endpoint
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
 
+# --------------------------------------------------
 # Prompt endpoint
+# --------------------------------------------------
+
+
 @app.post(
     "/api/prompt",
     response_model=PromptResponse,
@@ -316,8 +379,12 @@ def submit_prompt(request: PromptRequest):
     )
 
 
-# Memory grid configuration helper
-def get_grid_config() -> dict:
+# --------------------------------------------------
+# Grid configuration and statistics
+# --------------------------------------------------
+
+@app.get("/api/grid/config")
+def grid_config():
     return {
         "node_count": settings.node_count,
         "cache_size_per_node": settings.cache_size_per_node,
@@ -325,10 +392,15 @@ def get_grid_config() -> dict:
     }
 
 
-# Memory grid configuration endpoint
-@app.get("/api/grid/config")
-def grid_config():
-    return get_grid_config()
+@app.get("/api/grid/health")
+def grid_health():
+    stats = grid.stats()
+    return {
+        "status": "healthy",
+        "node_count": len(stats),
+        "total_cached_entries": sum(node["entries"] for node in stats),
+        "capacity_per_node": settings.cache_size_per_node,
+    }
 
 
 # Memory grid statistics endpoint
@@ -365,7 +437,10 @@ def grid_clear():
     }
 
 
-# PDF date extraction endpoint
+# --------------------------------------------------
+# PDF endpoint
+# --------------------------------------------------
+
 @app.post("/api/pdf/today")
 async def extract_today_pdf_matches(
     file: UploadFile = File(...),
@@ -386,31 +461,27 @@ async def extract_today_pdf_matches(
     text = extract_pdf_text(file_bytes)
     normalized_text = normalize_pdf_text(text)
 
-    request_id = str(uuid4())
-    pdf_cache_key = f"pdf:{file.filename}:{request_id}"
-
-    # Cache the extracted PDF text for 60 seconds.
-    # This assumes MemoryGrid.set supports the ttl keyword.
-    grid.set(
-        pdf_cache_key,
-        normalized_text,
-        ttl=60,
-    )
-
     today = date.today()
 
     target_day = day if day is not None else today.day
-
     target_month = (
-        month
-        if month is not None
-        else month_abbr[today.month]
+        month if month is not None else month_abbr[today.month]
     ).strip().lower()
 
     matches = find_today_date_matches(
         normalized_text,
         day=target_day,
         month=target_month,
+    )
+
+    # Cache PDF text for 60 seconds.
+    # This requires MemoryGrid.set(..., ttl=60) support.
+    pdf_cache_key = f"pdf:{file.filename}:{uuid4()}"
+
+    grid.set(
+        pdf_cache_key,
+        normalized_text,
+        ttl=60,
     )
 
     return {
@@ -423,4 +494,3 @@ async def extract_today_pdf_matches(
             "Only the requested date has been extracted."
         ),
     }
-

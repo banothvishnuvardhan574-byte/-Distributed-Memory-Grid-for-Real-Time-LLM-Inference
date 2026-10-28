@@ -250,6 +250,7 @@ is available at <http://127.0.0.1:8000/docs>.
 | `GET` | `/` | API welcome message and readiness status. |
 | `GET` | `/health` | Health check; returns `{"status":"ok"}`. |
 | `POST` | `/api/prompt` | Submit JSON such as `{"prompt":"Hello"}`. Returns the response, request ID, and `hit`/`miss` cache result. Empty prompts return HTTP 400; worker failures return HTTP 500. |
+| `GET` | `/api/grid/health` | Grid summary with node count, total cached entries, and per-node capacity. |
 | `GET` | `/api/grid/stats` | Per-node cache details and aggregate `cache_hits`, `cache_misses`, and `hit_rate` (0.0 before any cache requests). |
 | `POST` | `/api/grid/clear` | Clear all grid entries and reset cache metrics. |
 | `POST` | `/api/pdf/today` | Upload a PDF as multipart field `file`. Optional multipart fields `day` and `month` choose a date; omitted fields default to today's corresponding date parts. Returns matching text and the effective target date. |
@@ -262,6 +263,24 @@ curl -X POST http://127.0.0.1:8000/api/pdf/today -F "file=@sample.pdf" -F "day=2
 
 The API accepts PDF filenames ending in `.pdf` and uses `pypdf` to extract
 their text.
+
+## Run the full stack
+
+From the repository root, run both the backend and frontend with:
+
+```bash
+./run_dev.sh
+```
+
+The backend is available at `http://localhost:8000` and the frontend at
+`http://localhost:5173`.
+
+## Observability
+
+- `GET /api/grid/health` reports node count, cached entries, and capacity per node.
+- `GET /api/grid/stats` reports per-node statistics and the cache hit rate.
+- Request method, path, status code, and elapsed time are logged for each API
+  request in the Uvicorn console.
 
 ## Run the tests
 
@@ -283,3 +302,9 @@ npm run dev
 
 The Vite development server runs at <http://localhost:3000> and proxies API
 requests to the backend at `http://localhost:8000`.
+## Run the Full Stack
+
+Start the backend and frontend using the project's development script:
+
+```bash
+./run_dev.sh

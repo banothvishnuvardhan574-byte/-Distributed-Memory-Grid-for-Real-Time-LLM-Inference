@@ -10,14 +10,11 @@ from uuid import uuid4
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
- member4-day13
 
 
 class PromptRequest(BaseModel):
     prompt: str = Field(..., max_length=4000)
 
-
- main
 
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
@@ -351,38 +348,16 @@ def submit_prompt(request: PromptRequest):
         )
 
     request_id = str(uuid4())
-    result = run_prompt(prompt, request_id)
-    return result
-
-
-@app.post("/api/prompt")
-def submit_prompt_route(request: PromptRequest):
-    prompt = request.prompt.strip()
-
-    if not prompt:
-        raise HTTPException(
-            status_code=400,
-            detail="Prompt cannot be empty",
-        )
-
-    request_id = str(uuid4())
-    result = run_prompt(prompt, request_id)
 
     try:
-        result = run_prompt(
-            prompt,
-            request_id,
-        )
-
+        result = run_prompt(prompt, request_id)
     except Exception as exc:
         logger.exception("Prompt processing failed")
-
         raise HTTPException(
             status_code=500,
             detail="Prompt processing failed",
         ) from exc
 
-    # Surface worker failures as HTTP 500.
     if result.get("status") != "completed":
         raise HTTPException(
             status_code=500,
@@ -406,11 +381,6 @@ def submit_prompt_route(request: PromptRequest):
 @app.get("/api/grid/config")
 def grid_config():
     return {
-        "request_id": result["request_id"],
-        "status": "accepted",
-        "prompt": prompt,
-        "response": result["response"],
-        "cache": result.get("cache", "miss"),
         "node_count": settings.node_count,
         "cache_size_per_node": settings.cache_size_per_node,
         "default_ttl_seconds": settings.default_ttl_seconds,

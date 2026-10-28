@@ -3,8 +3,8 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 
-from app.main import app
 import app.main as main
+from app.main import app
 
 
 client = TestClient(app)
@@ -32,8 +32,19 @@ def test_submit_prompt_trims_prompt_and_returns_request_id():
 
     assert response.status_code == 200
     response_body = response.json()
-    assert response_body["status"] == "accepted"
+    assert set(response_body) == {
+        "request_id",
+        "status",
+        "prompt",
+        "response",
+        "cache",
+        "error",
+    }
+    assert response_body["status"] == "completed"
     assert response_body["prompt"] == "hello"
+    assert response_body["response"] == "[stub] echo: hello"
+    assert response_body["cache"] in {"hit", "miss"}
+    assert response_body["error"] is None
     UUID(response_body["request_id"])
 
 
@@ -42,6 +53,15 @@ def test_submit_prompt_rejects_empty_prompt():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Prompt cannot be empty"
+
+
+def test_submit_prompt_rejects_missing_prompt():
+    response = client.post("/api/prompt", json={})
+
+    assert response.status_code == 422
+    error = response.json()["detail"][0]
+    assert error["loc"] == ["body", "prompt"]
+    assert error["type"] == "missing"
 
 
 def test_prompt_acceptance_inputs_and_cache_behavior():

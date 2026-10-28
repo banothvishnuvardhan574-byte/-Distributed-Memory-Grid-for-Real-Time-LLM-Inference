@@ -30,7 +30,7 @@ def test_submit_prompt_trims_prompt_and_returns_request_id():
 
     assert response.status_code == 200
     response_body = response.json()
-    assert response_body["status"] == "accepted"
+    assert response_body["status"] == "completed"
     assert response_body["prompt"] == "hello"
     UUID(response_body["request_id"])
 

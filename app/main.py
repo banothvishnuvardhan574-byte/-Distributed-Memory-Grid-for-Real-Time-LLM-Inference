@@ -322,9 +322,13 @@ def home():
     }
 
 
-@app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/health")
+def health_check_route():
+    return {"status": "healthy"}
 
 
 # --------------------------------------------------
@@ -347,6 +351,22 @@ def submit_prompt(request: PromptRequest):
         )
 
     request_id = str(uuid4())
+    result = run_prompt(prompt, request_id)
+    return result
+
+
+@app.post("/api/prompt")
+def submit_prompt_route(request: PromptRequest):
+    prompt = request.prompt.strip()
+
+    if not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="Prompt cannot be empty",
+        )
+
+    request_id = str(uuid4())
+    result = run_prompt(prompt, request_id)
 
     try:
         result = run_prompt(
@@ -386,6 +406,11 @@ def submit_prompt(request: PromptRequest):
 @app.get("/api/grid/config")
 def grid_config():
     return {
+        "request_id": result["request_id"],
+        "status": "accepted",
+        "prompt": prompt,
+        "response": result["response"],
+        "cache": result.get("cache", "miss"),
         "node_count": settings.node_count,
         "cache_size_per_node": settings.cache_size_per_node,
         "default_ttl_seconds": settings.default_ttl_seconds,

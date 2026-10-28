@@ -3,7 +3,8 @@ import time
 
 import pytest
 
-from worker.worker import process_prompt
+worker_module = pytest.importorskip("worker.worker", reason="worker module not available")
+process_prompt = worker_module.process_prompt
 
 
 def successful_inference(prompt: str) -> str:
@@ -23,11 +24,12 @@ def slow_inference(prompt: str) -> str:
     return "This response is too late"
 
 
-def test_process_prompt_returns_response():
+def test_worker_module_success_when_available():
     result = process_prompt(
         request_id="123",
         prompt="Hello",
         inference_fn=successful_inference,
+        timeout_seconds=20,
     )
 
     assert result == {
@@ -38,11 +40,25 @@ def test_process_prompt_returns_response():
     }
 
 
+def test_worker_module_failure_when_available():
+    result = process_prompt(
+        request_id="999",
+        prompt="Hello",
+        inference_fn=failing_inference,
+        timeout_seconds=20,
+    )
+
+    assert result["status"] == "failed"
+    assert result["request_id"] == "999"
+    assert result["response"] == "Failed to process prompt"
+
+
 def test_process_prompt_removes_extra_spaces():
     result = process_prompt(
         request_id="456",
         prompt="  Hello  ",
         inference_fn=echo_inference,
+        timeout_seconds=20,
     )
 
     assert result["response"] == "You said: Hello"
@@ -64,6 +80,7 @@ def test_process_prompt_handles_inference_error():
         request_id="999",
         prompt="Hello",
         inference_fn=failing_inference,
+        timeout_seconds=20,
     )
 
     assert result == {

@@ -50,7 +50,8 @@ def test_worker_module_failure_when_available():
 
     assert result["status"] == "failed"
     assert result["request_id"] == "999"
-    assert result["response"] == "Failed to process prompt"
+    assert result["response"] is None
+    assert result["error"] == "Failed to process prompt"
 
 
 def test_process_prompt_removes_extra_spaces():

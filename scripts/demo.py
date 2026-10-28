@@ -9,7 +9,17 @@ def show(title, data):
 
 
 def main():
-    show("health", httpx.get(f"{BASE}/health").json())
+    try:
+        health = httpx.get(f"{BASE}/health", timeout=5)
+    except httpx.ConnectError as exc:
+        raise SystemExit(
+            "Cannot connect to the API at http://localhost:8000. "
+            "Start it in another terminal with:\n"
+            "  .venv\\Scripts\\python -m uvicorn app.main:app --reload "
+            "--host 127.0.0.1 --port 8000"
+        ) from exc
+
+    show("health", health.json())
     show("grid config", httpx.get(f"{BASE}/api/grid/config").json())
     show("grid health", httpx.get(f"{BASE}/api/grid/health").json())
 

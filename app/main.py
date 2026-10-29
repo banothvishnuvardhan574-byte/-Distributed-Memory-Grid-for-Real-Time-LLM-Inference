@@ -11,6 +11,14 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+
+
+class PromptRequest(BaseModel):
+    prompt: str = Field(..., max_length=4000)
+
+
+
+
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
 from worker.worker import process_prompt
@@ -69,6 +77,7 @@ class PromptRequest(BaseModel):
     prompt: str = Field(..., max_length=4000)
 
 
+# Response model
 class PromptResponse(BaseModel):
     request_id: str
     status: str
@@ -257,7 +266,10 @@ def extract_pdf_text(file_bytes: bytes) -> str:
     if PdfReader is None:
         raise HTTPException(
             status_code=500,
-            detail="PDF support is not installed. Please install pypdf.",
+            detail=(
+                "PDF support is not installed. "
+                "Please install pypdf."
+            ),
         )
 
     try:
@@ -292,6 +304,7 @@ def extract_pdf_text(file_bytes: bytes) -> str:
         ) from exc
 
 
+# Normalize extracted PDF text
 def normalize_pdf_text(text: str) -> str:
     """Normalize whitespace in extracted PDF text."""
     return re.sub(r"\s+", " ", text).strip()
@@ -309,19 +322,20 @@ def home():
     }
 
 
-@app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/health")
+def health_check_route():
+    return {"status": "healthy"}
 
 
 # --------------------------------------------------
 # Prompt endpoint
 # --------------------------------------------------
 
-@app.post(
-    "/api/prompt",
-    response_model=PromptResponse,
-)
+@app.post("/api/prompt", response_model=PromptResponse)
 def submit_prompt(request: PromptRequest):
     prompt = request.prompt.strip()
 
@@ -335,10 +349,8 @@ def submit_prompt(request: PromptRequest):
 
     try:
         result = run_prompt(prompt, request_id)
-
     except Exception as exc:
         logger.exception("Prompt processing failed")
-
         raise HTTPException(
             status_code=500,
             detail="Prompt processing failed",
@@ -384,6 +396,7 @@ def grid_health():
     }
 
 
+# Memory grid statistics endpoint
 @app.get("/api/grid/stats")
 def grid_stats():
     hits = cache_metrics["hits"]
@@ -402,6 +415,7 @@ def grid_stats():
     }
 
 
+# Clear memory grid and reset cache metrics
 @app.post("/api/grid/clear", status_code=200)
 def grid_clear():
     for node in grid.nodes:
@@ -426,13 +440,17 @@ async def extract_today_pdf_matches(
     day: int | None = Form(None),
     month: str | None = Form(None),
 ):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
+    if (
+        not file.filename
+        or not file.filename.lower().endswith(".pdf")
+    ):
         raise HTTPException(
             status_code=400,
             detail="Please upload a PDF file.",
         )
 
     file_bytes = await file.read()
+
     text = extract_pdf_text(file_bytes)
     normalized_text = normalize_pdf_text(text)
 

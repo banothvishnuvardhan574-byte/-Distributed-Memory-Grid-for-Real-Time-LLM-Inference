@@ -1,19 +1,27 @@
 # Distributed Memory Grid for Real-Time LLM Inference
 
-LLM MemoryGrid is a FastAPI backend and React frontend for testing prompt
-inference with a hash-routed, in-memory cache. The current backend uses a stub
-inference function, making the project runnable without an external LLM
-provider.
+**LLM MemoryGrid** is a FastAPI backend and React frontend for testing prompt inference with a hash-routed, in-memory cache. The current backend uses a stub inference function, allowing the project to run without an external LLM provider.
+
+## Features
+
+* FastAPI backend for prompt submission and processing.
+* Hash-based routing across in-memory cache nodes.
+* Prompt caching with hit/miss tracking.
+* Grid health and cache statistics endpoints.
+* PDF text extraction and date-based matching.
+* Request logging and API observability.
+* React frontend built with Vite.
+* Automated tests and an API demonstration script.
 
 ## Requirements
 
-- Python 3.10 or newer
-- Node.js and npm (for the frontend)
+* Python 3.10 or newer
+* Node.js and npm
+* Git
 
-## Install and run the backend
+## Backend Setup
 
-From the repository root, create and activate a virtual environment, then
-install the Python dependencies:
+Run these commands from the repository root in PowerShell:
 
 ```powershell
 py -m venv .venv
@@ -21,73 +29,84 @@ py -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-On macOS or Linux, activate the environment with
-`source .venv/bin/activate` instead.
+If PowerShell prevents environment activation, check your execution policy or activate the environment using an appropriate alternative.
 
-Start the API:
+### Start the Backend
 
-```text
-python -m uvicorn app.main:app --reload
+```powershell
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The backend listens at <http://127.0.0.1:8000>. Interactive API documentation
-is available at <http://127.0.0.1:8000/docs>.
+The API is available at:
 
-## API endpoints
+* API base: http://127.0.0.1:8000
+* Interactive API documentation: http://127.0.0.1:8000/docs
 
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | `/` | API welcome message and readiness status. |
-| `GET` | `/health` | Health check; returns `{"status":"ok"}`. |
-| `POST` | `/api/prompt` | Submit JSON such as `{"prompt":"Hello"}`. Returns the response, request ID, and `hit`/`miss` cache result. Empty prompts return HTTP 400; worker failures return HTTP 500. |
-| `GET` | `/api/grid/health` | Grid summary with node count, total cached entries, and per-node capacity. |
-| `GET` | `/api/grid/stats` | Per-node cache details and aggregate `cache_hits`, `cache_misses`, and `hit_rate` (0.0 before any cache requests). |
-| `POST` | `/api/grid/clear` | Clear all grid entries and reset cache metrics. |
-| `POST` | `/api/pdf/today` | Upload a PDF as multipart field `file`. Optional multipart fields `day` and `month` choose a date; omitted fields default to today's corresponding date parts. Returns matching text and the effective target date. |
+## API Endpoints
 
-For example, a PDF request with an explicit date can be made with:
+| Method | Endpoint           | Description                                                               |
+| ------ | ------------------ | ------------------------------------------------------------------------- |
+| GET    | `/`                | Returns the API welcome message and readiness status.                     |
+| GET    | `/health`          | Checks API health.                                                        |
+| POST   | `/api/prompt`      | Submits a prompt and returns its response, request ID, and cache result.  |
+| GET    | `/api/grid/health` | Returns grid health information, including node count and cached entries. |
+| GET    | `/api/grid/stats`  | Returns per-node statistics and aggregate cache metrics.                  |
+| POST   | `/api/grid/clear`  | Clears cached entries and resets cache metrics.                           |
+| POST   | `/api/pdf/today`   | Accepts a PDF upload and performs date-based text matching.               |
+
+### Submit a Prompt
+
+Example request:
+
+```json
+{
+  "prompt": "Hello"
+}
+```
+
+The prompt endpoint returns the generated or cached response and indicates whether the request was a cache hit or miss.
+
+According to the current API contract, empty prompts return HTTP 400 and worker failures return HTTP 500.
+
+### Upload a PDF
+
+The PDF endpoint accepts a multipart upload using the field `file`. Optional `day` and `month` fields specify the target date.
+
+Example using curl:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/pdf/today -F "file=@sample.pdf" -F "day=22" -F "month=oct"
+curl -X POST http://127.0.0.1:8000/api/pdf/today \
+  -F "file=@sample.pdf" \
+  -F "day=22" \
+  -F "month=oct"
 ```
 
-The API accepts PDF filenames ending in `.pdf` and uses `pypdf` to extract
-their text.
-
-## Run the full stack
-
-From the repository root, run both the backend and frontend with:
-
-```bash
-./run_dev.sh
-```
-
-The backend is available at `http://localhost:8000` and the frontend at
-`http://localhost:5173`.
+The backend uses `pypdf` to extract PDF text. Confirm the accepted filename and validation rules in the current implementation.
 
 ## Observability
 
-- `GET /api/grid/health` reports node count, cached entries, and capacity per node.
-- `GET /api/grid/stats` reports per-node statistics and the cache hit rate.
-- Request method, path, status code, and elapsed time are logged for each API
-  request in the Uvicorn console.
+The grid statistics endpoint provides cache-related information, including:
 
-## Run the API demo
+* Cache hits
+* Cache misses
+* Cache hit rate
+* Per-node statistics
 
-Start the backend, then open another terminal in the repository root and run:
+Request logging records the HTTP method, path, response status, and elapsed time in the Uvicorn console.
+
+## Run the API Demo
+
+Start the backend first. Open a second terminal in the repository root, activate the virtual environment, and run:
 
 ```powershell
 python scripts/demo.py
 ```
 
-The demo checks API and grid health, grid configuration, cache clearing,
-repeated-prompt caching, grid statistics, and empty-prompt validation.
+The demo is intended to check API health, grid configuration, cache clearing, repeated-prompt caching, grid statistics, and empty-prompt validation.
 
-## Run the tests
+## Run the Tests
 
-From the repository root:
-
-Run the Day 17 integration checks:
+Run the Day 17 integration tests:
 
 ```powershell
 python -m pytest tests/test_day17_integration.py -v
@@ -99,21 +118,30 @@ Run the complete test suite:
 python -m pytest tests/ -v
 ```
 
-## Run the frontend
+Resolve any dependency or test-collection errors before treating the test suite as passing.
 
-In a second terminal:
+## Frontend Setup
 
-```text
+Open another terminal:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-The Vite development server runs at <http://localhost:3000> and proxies API
-requests to the backend at `http://localhost:8000`.
+Use the local URL printed by Vite in the terminal. The frontend's port and API proxy target depend on the current Vite configuration.
+
 ## Run the Full Stack
 
-Start the backend and frontend using the project's development script:
+The repository includes a `run_dev.sh` script for starting the development environment:
 
 ```bash
 ./run_dev.sh
+```
+
+This command requires a compatible shell, such as Git Bash or WSL on Windows. Alternatively, run the backend and frontend in separate terminals using the commands above.
+
+## Project Status
+
+The backend currently uses a stub inference function rather than requiring an external LLM provider. This makes it possible to develop and test the caching, routing, API, and frontend workflows independently of a production inference service.

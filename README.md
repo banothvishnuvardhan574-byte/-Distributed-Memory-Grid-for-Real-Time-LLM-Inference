@@ -72,11 +72,30 @@ The backend is available at `http://localhost:8000` and the frontend at
 - Request method, path, status code, and elapsed time are logged for each API
   request in the Uvicorn console.
 
+## Run the API demo
+
+Start the backend, then open another terminal in the repository root and run:
+
+```powershell
+python scripts/demo.py
+```
+
+The demo checks API and grid health, grid configuration, cache clearing,
+repeated-prompt caching, grid statistics, and empty-prompt validation.
+
 ## Run the tests
 
 From the repository root:
 
-```text
+Run the Day 17 integration checks:
+
+```powershell
+python -m pytest tests/test_day17_integration.py -v
+```
+
+Run the complete test suite:
+
+```powershell
 python -m pytest tests/ -v
 ```
 

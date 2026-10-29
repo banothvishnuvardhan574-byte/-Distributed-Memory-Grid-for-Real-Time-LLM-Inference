@@ -13,7 +13,7 @@ def test_app_imports_and_home():
 def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    assert response.json()["status"] == "healthy"
 
 
 def test_all_grid_endpoints():
@@ -54,3 +54,27 @@ def test_pdf_rejects_non_pdf():
         files={"file": ("note.txt", b"hello", "text/plain")},
     )
     assert response.status_code == 400
+
+def test_prompt_returns_500_when_worker_fails(monkeypatch):
+    client.post("/api/grid/clear")
+
+    def failed_process_prompt(request_id, prompt, inference_fn):
+        return {
+            "request_id": request_id,
+            "status": "failed",
+            "response": None,
+            "error": "Failed to process prompt",
+        }
+
+    monkeypatch.setattr(
+        "app.main.process_prompt",
+        failed_process_prompt,
+    )
+
+    response = client.post(
+        "/api/prompt",
+        json={"prompt": "day17 worker failure regression"},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Failed to process prompt"

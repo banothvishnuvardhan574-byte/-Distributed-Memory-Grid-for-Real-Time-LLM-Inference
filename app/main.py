@@ -12,8 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 
+
 class PromptRequest(BaseModel):
     prompt: str = Field(..., max_length=4000)
+
+
 
 
 from app.core.config import settings
@@ -332,15 +335,10 @@ def health_check_route():
 # Prompt endpoint
 # --------------------------------------------------
 
-
-@app.post(
-    "/api/prompt",
-    response_model=PromptResponse,
-)
+@app.post("/api/prompt", response_model=PromptResponse)
 def submit_prompt(request: PromptRequest):
     prompt = request.prompt.strip()
 
-    # Return HTTP 400 for empty or whitespace-only prompts.
     if not prompt:
         raise HTTPException(
             status_code=400,

@@ -10,9 +10,25 @@ def test_app_imports_and_home():
     assert response.status_code == 200 and response.json()["status"] == "ready"
 
 
+def test_health_endpoint():
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
 def test_all_grid_endpoints():
-    assert client.get("/api/grid/config").status_code == 200
-    assert client.get("/api/grid/health").json()["status"] == "healthy"
+    config = client.get("/api/grid/config")
+    assert config.status_code == 200
+    assert {
+        "node_count",
+        "cache_size_per_node",
+        "default_ttl_seconds",
+    } <= config.json().keys()
+
+    health = client.get("/api/grid/health")
+    assert health.status_code == 200
+    assert health.json()["status"] == "healthy"
+
     assert client.get("/api/grid/stats").status_code == 200
     assert client.post("/api/grid/clear").json()["status"] == "cleared"
 

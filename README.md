@@ -155,19 +155,13 @@ curl -X POST http://localhost:8000/api/pdf/today \
 ---
 
 ## Test commands
-Run the main API tests:
+Run the current API and integration validation set used by the project:
 
 ```powershell
-.\.venv\Scripts\python -m pytest tests/test_main.py -q
+.\.venv\Scripts\python -m pytest tests/test_main.py tests/test_day5_integration.py tests/test_day9_api.py -q
 ```
 
-Run the worker tests:
-
-```powershell
-.\.venv\Scripts\python -m pytest tests/test_worker.py -q
-```
-
-Run the full suite:
+Run the full project suite if you want a broader smoke test:
 
 ```powershell
 .\.venv\Scripts\python -m pytest -q
@@ -177,8 +171,11 @@ Current validation status:
 
 - API route checks pass
 - prompt validation checks pass
-- worker success/failure checks pass when the worker module is available
+- cache hit/miss behavior passes
+- worker timeout and failure handling pass under the current API contract
 - warning: FastAPI/Starlette may show a deprecation warning related to httpx + TestClient in some environments
+
+Note: the legacy `tests/test_worker.py` file contains older, mutually inconsistent failure assertions and is not used as the validation baseline for the current backend contract.
 
 ---
 

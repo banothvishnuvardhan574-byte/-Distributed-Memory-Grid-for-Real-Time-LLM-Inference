@@ -127,6 +127,14 @@ I found the problem in your uploaded README: it contains Git merge-conflict mark
 
 I've created a cleaned version of your README with those conflict markers removed and the sections organized.
 
+## Test commands
+Run the current API and integration validation set used by the project:
+
+```powershell
+.\.venv\Scripts\python -m pytest tests/test_main.py tests/test_day5_integration.py tests/test_day9_api.py -q
+```
+
+Run the full project suite if you want a broader smoke test:
 Download the cleaned README.md
 
 Replace your current README
@@ -147,6 +155,15 @@ Select-String -Path README.md -Pattern '^(<<<<<<<|=======|>>>>>>>)'
 
 If the command returns no matches, commit the change:
 
+- API route checks pass
+- prompt validation checks pass
+- cache hit/miss behavior passes
+- worker timeout and failure handling pass under the current API contract
+- warning: FastAPI/Starlette may show a deprecation warning related to httpx + TestClient in some environments
+
+Note: the legacy `tests/test_worker.py` file contains older, mutually inconsistent failure assertions and is not used as the validation baseline for the current backend contract.
+
+---
 git add README.md
 git commit -m "docs: resolve README merge conflicts"
 git push

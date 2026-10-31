@@ -1,0 +1,141 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\banot\OneDrive\Desktop\LLM_MemoryGrid\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\banot\OneDrive\Desktop\LLM_MemoryGrid
+plugins: anyio-4.15.1
+collecting ... collected 93 items
+
+tests/test_api_worker.py::test_post_prompt_roundtrips_request_id_through_worker PASSED [  1%]
+tests/test_api_worker.py::test_post_prompt_returns_500_when_worker_fails PASSED [  2%]
+tests/test_day11_prompt_api.py::test_prompt_endpoint_rejects_missing_prompt PASSED [  3%]
+tests/test_day11_prompt_api.py::test_prompt_endpoint_rejects_blank_prompt PASSED [  4%]
+tests/test_day11_prompt_api.py::test_prompt_endpoint_returns_expected_response_fields PASSED [  5%]
+tests/test_day12_config.py::test_memory_grid_applies_capacity_to_every_node PASSED [  6%]
+tests/test_day12_config.py::test_application_grid_uses_configured_capacity PASSED [  7%]
+tests/test_day12_config.py::test_grid_config_endpoint_returns_active_settings PASSED [  8%]
+tests/test_day12_pdf_validation.py::test_upload_rejects_unsupported_file_extension PASSED [  9%]
+tests/test_day12_pdf_validation.py::test_upload_rejects_empty_filename PASSED [ 10%]
+tests/test_day13_pdf_api.py::test_post_pdf_today_upload_returns_expected_date_matches PASSED [ 11%]
+tests/test_day13_validation.py::test_empty_prompt_returns_400 PASSED     [ 12%]
+tests/test_day13_validation.py::test_oversized_prompt_returns_422 PASSED [ 13%]
+tests/test_day13_validation.py::test_valid_prompt_returns_200 PASSED     [ 15%]
+tests/test_day16_integration.py::test_grid_health_endpoint PASSED        [ 16%]
+tests/test_day16_integration.py::test_prompt_flow_after_health PASSED    [ 17%]
+tests/test_day16_observability.py::test_grid_health_reports_expected_fields PASSED [ 18%]
+tests/test_day17_integration.py::test_app_imports_and_home PASSED        [ 19%]
+tests/test_day17_integration.py::test_health_endpoint FAILED             [ 20%]
+tests/test_day17_integration.py::test_all_grid_endpoints PASSED          [ 21%]
+tests/test_day17_integration.py::test_prompt_end_to_end PASSED           [ 22%]
+tests/test_day17_integration.py::test_validation_and_worker_error_paths PASSED [ 23%]
+tests/test_day17_integration.py::test_pdf_rejects_non_pdf PASSED         [ 24%]
+tests/test_day5_integration.py::test_health_check_returns_ok PASSED      [ 25%]
+tests/test_day5_integration.py::test_prompt_roundtrip_uses_grid_cache_and_worker PASSED [ 26%]
+tests/test_day5_integration.py::test_grid_stats_reports_configured_nodes PASSED [ 27%]
+tests/test_day5_integration.py::test_grid_stats_reports_cache_hits_misses_and_hit_rate PASSED [ 29%]
+tests/test_day5_integration.py::test_prompt_returns_failure_when_worker_fails PASSED [ 30%]
+tests/test_day5_integration.py::test_grid_clear PASSED                   [ 31%]
+tests/test_day5_integration.py::test_prompt_reprocesses_after_cached_response_expires PASSED [ 32%]
+tests/test_day9_api.py::test_prompt_response_model_is_published_in_openapi PASSED [ 33%]
+tests/test_day9_api.py::test_empty_prompt_returns_bad_request PASSED     [ 34%]
+tests/test_day9_api.py::test_worker_failure_returns_http_500_with_detail PASSED [ 35%]
+tests/test_day9_api.py::test_worker_failure_returns_http_500_without_counting_a_cache_miss PASSED [ 36%]
+tests/test_day9_api.py::test_pdf_endpoint_defaults_to_current_date PASSED [ 37%]
+tests/test_day9_api.py::test_empty_pdf_is_rejected_safely PASSED         [ 38%]
+tests/test_day9_api.py::test_invalid_pdf_is_rejected_safely PASSED       [ 39%]
+tests/test_eviction.py::test_no_eviction_under_capacity PASSED           [ 40%]
+tests/test_eviction.py::test_evicts_oldest_key PASSED                    [ 41%]
+tests/test_eviction.py::test_touch_refreshes_key PASSED                  [ 43%]
+tests/test_eviction.py::test_remove_forgets_key PASSED                   [ 44%]
+tests/test_eviction.py::test_invalid_capacity_raises PASSED              [ 45%]
+tests/test_eviction.py::test_negative_capacity_raises PASSED             [ 46%]
+tests/test_hashing.py::test_hash_prompt_is_stable PASSED                 [ 47%]
+tests/test_hashing.py::test_hash_prompt_normalizes_whitespace PASSED     [ 48%]
+tests/test_hashing.py::test_hash_prompt_differs_for_different_prompts PASSED [ 49%]
+tests/test_hashing.py::test_hash_to_int_returns_int PASSED               [ 50%]
+tests/test_main.py::test_home_returns_ready_status PASSED                [ 51%]
+tests/test_main.py::test_health_check_returns_healthy_status PASSED      [ 52%]
+tests/test_main.py::test_submit_prompt_trims_prompt_and_returns_request_id PASSED [ 53%]
+tests/test_main.py::test_submit_prompt_rejects_empty_prompt PASSED       [ 54%]
+tests/test_main.py::test_submit_prompt_rejects_missing_prompt PASSED     [ 55%]
+tests/test_main.py::test_prompt_acceptance_inputs_and_cache_behavior PASSED [ 56%]
+tests/test_memory_grid.py::test_grid_routes_set_and_get_to_the_same_node PASSED [ 58%]
+tests/test_memory_grid.py::test_grid_stats_reports_all_nodes PASSED      [ 59%]
+tests/test_memory_grid.py::test_grid_rejects_invalid_node_count PASSED   [ 60%]
+tests/test_memory_grid.py::test_grid_evicts_lru_key_on_target_node PASSED [ 61%]
+tests/test_memory_node.py::test_set_and_get PASSED                       [ 62%]
+tests/test_memory_node.py::test_missing_key_returns_none PASSED          [ 63%]
+tests/test_memory_node.py::test_expired_key_returns_none PASSED          [ 64%]
+tests/test_memory_node.py::test_evicts_lru_when_over_capacity PASSED     [ 65%]
+tests/test_memory_node.py::test_lru_eviction_stays_within_capacity_under_load PASSED [ 66%]
+tests/test_memory_node.py::test_expiration_at_ttl_boundary_removes_key_and_lru_entry PASSED [ 67%]
+tests/test_memory_node.py::test_delete PASSED                            [ 68%]
+tests/test_memory_node.py::test_stats PASSED                             [ 69%]
+tests/test_memory_node.py::test_invalid_capacity PASSED                  [ 70%]
+tests/test_memory_node.py::test_negative_capacity PASSED                 [ 72%]
+tests/test_memory_node.py::test_negative_ttl PASSED                      [ 73%]
+tests/test_pdf_extraction.py::test_extract_text_from_first_pdf PASSED    [ 74%]
+tests/test_pdf_extraction.py::test_extract_text_from_second_pdf PASSED   [ 75%]
+tests/test_pdf_extraction.py::test_corrupt_pdf_raises_http_exception PASSED [ 76%]
+tests/test_pdf_extraction.py::test_extract_text_from_valid_pdf_without_text_returns_empty_string PASSED [ 77%]
+tests/test_pdf_grid_handoff.py::test_pdf_text_is_normalized_and_stored_in_grid PASSED [ 78%]
+tests/test_pdf_workflow.py::test_find_today_date_matches_detects_today_entries PASSED [ 79%]
+tests/test_pdf_workflow.py::test_find_today_date_matches_common_month_name_and_numeric_formats PASSED [ 80%]
+tests/test_pdf_workflow.py::test_find_today_date_matches_handles_empty_text PASSED [ 81%]
+tests/test_pdf_workflow.py::test_normalize_pdf_text_collapses_extraction_whitespace PASSED [ 82%]
+tests/test_pdf_workflow.py::test_find_today_date_matches_defaults_to_current_date PASSED [ 83%]
+tests/test_pdf_workflow.py::test_find_today_date_matches_normalizes_month_input PASSED [ 84%]
+tests/test_router.py::test_route_is_deterministic PASSED                 [ 86%]
+tests/test_router.py::test_route_within_node_range PASSED                [ 87%]
+tests/test_router.py::test_routes_distributed_across_nodes PASSED        [ 88%]
+tests/test_router.py::test_route_many PASSED                             [ 89%]
+tests/test_router.py::test_empty_key_raises PASSED                       [ 90%]
+tests/test_router.py::test_invalid_node_count_raises[0] PASSED           [ 91%]
+tests/test_router.py::test_invalid_node_count_raises[-1] PASSED          [ 92%]
+tests/test_worker.py::test_worker_module_success_when_available PASSED   [ 93%]
+tests/test_worker.py::test_worker_module_failure_when_available PASSED   [ 94%]
+tests/test_worker.py::test_process_prompt_removes_extra_spaces PASSED    [ 95%]
+tests/test_worker.py::test_process_prompt_rejects_empty_prompt PASSED    [ 96%]
+tests/test_worker.py::test_process_prompt_handles_inference_error PASSED [ 97%]
+tests/test_worker.py::test_process_prompt_handles_timeout PASSED         [ 98%]
+tests/test_worker.py::test_process_prompt_rejects_invalid_timeout PASSED [100%]
+
+================================== FAILURES ===================================
+____________________________ test_health_endpoint _____________________________
+
+    def test_health_endpoint():
+        response = client.get("/health")
+        assert response.status_code == 200
+>       assert response.json()["status"] == "ok"
+E       AssertionError: assert 'healthy' == 'ok'
+E         
+E         - ok
+E         + healthy
+
+tests\test_day17_integration.py:16: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\banot\OneDrive\Desktop\LLM_MemoryGrid\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+app\main.py:105
+  C:\Users\banot\OneDrive\Desktop\LLM_MemoryGrid\app\main.py:105: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+.venv\Lib\site-packages\fastapi\applications.py:4745
+  C:\Users\banot\OneDrive\Desktop\LLM_MemoryGrid\.venv\Lib\site-packages\fastapi\applications.py:4745: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_day17_integration.py::test_health_endpoint - AssertionError...
+================== 1 failed, 92 passed, 3 warnings in 18.43s ==================

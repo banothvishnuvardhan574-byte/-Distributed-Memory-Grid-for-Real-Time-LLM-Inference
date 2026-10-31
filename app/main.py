@@ -11,14 +11,6 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-
-
-class PromptRequest(BaseModel):
-    prompt: str = Field(..., max_length=4000)
-
-
-
-
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
 from worker.worker import process_prompt

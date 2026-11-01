@@ -76,6 +76,17 @@ function Journey({ phase }) {
 
 function Response({ data, error, onDismissError }) {
   const [copied, setCopied] = useState(false);
+  const cacheState = typeof data?.cache === 'string' ? data.cache.trim().toLowerCase() : '';
+  const cacheDescription = cacheState === 'hit'
+    ? 'Hit — retrieved cached response'
+    : cacheState === 'miss'
+      ? 'Miss — no valid cached result (missing or expired); generated a fresh response'
+      : cacheState === 'expired'
+        ? 'Expired — generated a fresh response'
+        : cacheState === 'missing'
+          ? 'Missing — generated a fresh response'
+          : data?.cache;
+
   const copyRequestId = async () => {
     if (!data?.request_id) return;
     try {
@@ -86,7 +97,51 @@ function Response({ data, error, onDismissError }) {
       setCopied(false);
     }
   };
-  return <section className="response card" aria-live="polite"><div className="response-head"><div className="panel-title"><DescriptionOutlined /><h2>Response</h2></div><span>{data?.timestamp || 'Awaiting request'}</span></div>{error ? <div className="ack error"><ErrorOutlined /><div><b>Request failed</b><p>{error}</p><button className="copy" type="button" onClick={onDismissError}>Dismiss</button></div></div> : data ? <><div className="ack"><CheckCircleOutlined /><div><b>{data.status === 'completed' ? 'Response received' : 'Prompt submitted'}</b><p>{data.response || 'Backend acknowledged the request.'}</p></div></div><div className="response-meta"><div>Request ID <strong>{data.request_id || 'Not supplied'}</strong><button className="copy" type="button" onClick={copyRequestId} aria-label="Copy request ID"><ContentCopyOutlined fontSize="small" />{copied ? 'Copied' : 'Copy'}</button></div>{data.latency != null && <div>Latency <strong>{data.latency} ms</strong></div>}<div>Status <strong className="status-live">{data.status || 'unknown'}</strong></div></div></> : <div className="empty-response">Submit a prompt to view its backend acknowledgment, real request ID, and measured latency.</div>}</section>;
+  return (
+    <section className="response card" aria-live="polite">
+      <div className="response-head">
+        <div className="panel-title"><DescriptionOutlined /><h2>Response</h2></div>
+        <span>{data?.timestamp || 'Awaiting request'}</span>
+      </div>
+      {error ? (
+        <div className="ack error">
+          <ErrorOutlined />
+          <div>
+            <b>Request failed</b>
+            <p>{error}</p>
+            <button className="copy" type="button" onClick={onDismissError}>Dismiss</button>
+          </div>
+        </div>
+      ) : data ? (
+        <>
+          <div className="ack">
+            <CheckCircleOutlined />
+            <div>
+              <b>{data.status === 'completed' ? 'Response received' : 'Prompt submitted'}</b>
+              <p>{data.response || 'Backend acknowledged the request.'}</p>
+            </div>
+          </div>
+          <div className="response-meta">
+            <div>
+              Request ID <strong>{data.request_id || 'Not supplied'}</strong>
+              <button className="copy" type="button" onClick={copyRequestId} aria-label="Copy request ID">
+                <ContentCopyOutlined fontSize="small" />{copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            {data.latency != null && <div>Latency <strong>{data.latency} ms</strong></div>}
+            <div>Status <strong className="status-live">{data.status || 'unknown'}</strong></div>
+            {cacheDescription && (
+              <div>Cache <strong className="status-live">{cacheDescription}</strong></div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="empty-response">
+          Submit a prompt to view its backend acknowledgment, real request ID, and measured latency.
+        </div>
+      )}
+    </section>
+  );
 }
 
 async function readError(response) {
@@ -153,5 +208,101 @@ export default function App() {
   const tokenEstimate = Math.ceil(charCount / 4);
   const phase = error ? 'error' : isLoading ? 'loading' : responseData?.status === 'completed' ? 'completed' : responseData ? 'accepted' : 'idle';
 
-  return <><header><a className="brand" href="#top" aria-label="MemoryGrid home"><span className="logo"><HubOutlined /></span><span>MemoryGrid</span></a><nav aria-label="Primary navigation"><a className="selected">Overview</a><a href="#prompt">Prompt</a><a href="#network">Network</a><a href="#history">History</a><a href="#system">System</a></nav><div className="backend" title={`${requestHistory.length} request${requestHistory.length === 1 ? '' : 's'} this session`}><i className={backend === 'Backend connected' ? 'ok' : ''} /><span>{backend}<small>localhost:8000</small></span></div><button className="profile" type="button" aria-label="User profile">T</button></header><main id="top"><aside className="editorial"><p className="eyebrow">Distributed memory</p><h1>Explore the<br />memory grid.</h1><div className="brush" /><p className="intro">Submit a prompt, follow its journey across the system, and understand how distributed memory enables real-time LLM inference.</p><div className="features"><div><b><ArchitectureOutlined /></b><span><strong>Distributed architecture</strong><small>Multiple memory nodes working together</small></span></div><div><b><BoltOutlined /></b><span><strong>Efficient memory management</strong><small>Key-value storage with TTL and LRU</small></span></div><div><b><BarChartOutlined /></b><span><strong>Real-time request flow</strong><small>Track your request across the system</small></span></div></div><div className="botanical" aria-hidden="true"><i /><i /><i /><span>Smarter<br />Memory<br />Brighter<br />AI</span></div></aside><div className="dashboard"><div className="top-row"><Topology stats={stats} /><aside className="sticky"><b><LightbulbOutlined />Example Prompts</b>{EXAMPLES.map((example) => <button type="button" onClick={() => setPrompt(example)} key={example}><SendRounded fontSize="small" /><span>{example}</span></button>)}</aside></div><section id="prompt" className="composer card"><div className="composer-title"><ChatBubbleOutlined /><h2>Prompt Input</h2><small>Ctrl + Enter to submit</small></div><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); handleSubmit(); } }} placeholder="Ask something about the memory grid..." disabled={isLoading} aria-label="Prompt input" /><div className="compose-toolbar"><span title="Attachments are not supported by this API"><AttachFileOutlined fontSize="small" />Attachments unavailable &nbsp;|&nbsp; {charCount} characters &nbsp;{wordCount} words &nbsp;{tokenEstimate} tokens</span><button className="submit" type="button" onClick={handleSubmit} disabled={isLoading || !prompt.trim()} aria-label={isLoading ? 'Submitting prompt' : 'Submit prompt'}>{isLoading ? <span className="spinner" /> : <SendRounded />}</button></div><div className="quick"><b>Quick prompts:</b>{QUICK_PROMPTS.map((quick) => <button type="button" onClick={() => setPrompt(quick)} key={quick}>{quick}</button>)}</div></section><div className="bottom"><Journey phase={phase} /><Response data={responseData} error={error} onDismissError={() => setError(null)} /></div></div></main></>;
+  return (
+    <>
+      <header>
+        <a className="brand" href="#top" aria-label="MemoryGrid home">
+          <span className="logo"><HubOutlined /></span>
+          <span>MemoryGrid</span>
+        </a>
+        <nav aria-label="Primary navigation">
+          <a className="selected">Overview</a>
+          <a href="#prompt">Prompt</a>
+          <a href="#network">Network</a>
+          <a href="#history">History</a>
+          <a href="#system">System</a>
+        </nav>
+        <div className="backend" title={`${requestHistory.length} request${requestHistory.length === 1 ? '' : 's'} this session`}>
+          <i className={backend === 'Backend connected' ? 'ok' : ''} />
+          <span>{backend}<small>localhost:8000</small></span>
+        </div>
+        <button className="profile" type="button" aria-label="User profile">T</button>
+      </header>
+      <main id="top">
+        <aside className="editorial">
+          <p className="eyebrow">Distributed memory</p>
+          <h1>Explore the<br />memory grid.</h1>
+          <div className="brush" />
+          <p className="intro">Submit a prompt, follow its journey across the system, and understand how distributed memory enables real-time LLM inference.</p>
+          <div className="features">
+            <div><b><ArchitectureOutlined /></b><span><strong>Distributed architecture</strong><small>Multiple memory nodes working together</small></span></div>
+            <div><b><BoltOutlined /></b><span><strong>Efficient memory management</strong><small>Key-value storage with TTL and LRU</small></span></div>
+            <div><b><BarChartOutlined /></b><span><strong>Real-time request flow</strong><small>Track your request across the system</small></span></div>
+          </div>
+          <div className="botanical" aria-hidden="true"><i /><i /><i /><span>Smarter<br />Memory<br />Brighter<br />AI</span></div>
+        </aside>
+        <div className="dashboard">
+          <div className="top-row">
+            <Topology stats={stats} />
+            <aside className="sticky">
+              <b><LightbulbOutlined />Example Prompts</b>
+              {EXAMPLES.map((example) => (
+                <button type="button" onClick={() => setPrompt(example)} key={example}>
+                  <SendRounded fontSize="small" /><span>{example}</span>
+                </button>
+              ))}
+            </aside>
+          </div>
+          <section id="prompt" className="composer card">
+            <div className="composer-title">
+              <ChatBubbleOutlined /><h2>Prompt Input</h2><small>Ctrl + Enter to submit</small>
+            </div>
+            <textarea
+              value={prompt}
+              maxLength={4000}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                  event.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              placeholder="Ask something about the memory grid..."
+              disabled={isLoading}
+              aria-label="Prompt input"
+              aria-describedby="prompt-character-count"
+            />
+            <div className="compose-toolbar">
+              <span title="Attachments are not supported by this API">
+                <AttachFileOutlined fontSize="small" />Attachments unavailable &nbsp;|&nbsp;
+                <span id="prompt-character-count">
+                  {charCount} / 4000 characters
+                </span>
+                &nbsp;{wordCount} words &nbsp;{tokenEstimate} tokens
+              </span>
+              <button
+                className="submit"
+                type="button"
+                onClick={handleSubmit}
+                disabled={isLoading || !prompt.trim()}
+                aria-label={isLoading ? 'Submitting prompt' : 'Submit prompt'}
+              >
+                {isLoading ? <span className="spinner" /> : <SendRounded />}
+              </button>
+            </div>
+            <div className="quick">
+              <b>Quick prompts:</b>
+              {QUICK_PROMPTS.map((quick) => (
+                <button type="button" onClick={() => setPrompt(quick)} key={quick}>{quick}</button>
+              ))}
+            </div>
+          </section>
+          <div className="bottom">
+            <Journey phase={phase} />
+            <Response data={responseData} error={error} onDismissError={() => setError(null)} />
+          </div>
+        </div>
+      </main>
+    </>
+  );
 }

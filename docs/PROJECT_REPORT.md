@@ -50,7 +50,7 @@ Run the Day 17 integration tests:
 python -m pytest tests/test_day17_integration.py -v
 ```
 
-The captured full-suite output is saved as `test_results.txt` in the Day 18 test-report branch. That run collected 93 tests: 92 passed and one failed because the Day 17 health test expects the response status `"ok"` while the current endpoint returns `"healthy"`. The test log includes the full failure details.
+The Day 18 run collected 93 tests and exposed a stale health-status assertion. On the Day 19 clean `main` baseline, the full suite passed: 94 passed, 0 failed, with 3 deprecation warnings. The fresh verbose run is saved as `test_results_day19.txt` in the Day 19 regression contribution.
 
 ## 6. Development Environment
 
@@ -62,10 +62,26 @@ The captured full-suite output is saved as `test_results.txt` in the Day 18 test
 
 ## 7. Current Development Status
 
-Backend API functionality, cache management, worker processing, PDF handling, frontend integration, and automated tests are implemented. The full-suite result above identifies a health-response expectation mismatch to resolve.
+Backend API functionality, cache management, worker processing, PDF handling, frontend integration, and automated tests are implemented. The full suite is green on the Day 19 baseline. The demo portal now includes PDF date lookup and cache/grid statistics alongside prompt submission.
 
 Further work includes reviewing hash-routing behavior under node changes, testing performance, and integrating a production LLM inference provider.
 
 ## 8. Conclusion
 
 LLM MemoryGrid demonstrates an architecture for reducing repeated prompt-processing work through caching and memory-node routing. It provides a foundation for further development and performance evaluation.
+
+## 9. Team Contributions
+
+- **Member 1 (Lead):** Architecture, FastAPI application endpoints, reviews, and this project report.
+- **Member 2:** Memory grid design and implementation, including deterministic hash routing, TTL expiration, and per-node LRU eviction.
+- **Member 3:** PDF text extraction with `pypdf`, date matching across supported formats, and malformed/encrypted PDF handling.
+- **Member 4:** Isolated worker processing, timeout and failure handling, and worker/API tests.
+- **Member 5:** React frontend prompt portal, PDF upload, and cache/grid statistics dashboard.
+
+## 10. Day 19 Results
+
+- Repeated prompt test verified a cache miss followed by a cache hit.
+- Memory-node tests verified least-recently-used eviction while staying within configured capacity.
+- Worker failure tests verified a clean HTTP 500 response; timeout tests verified a bounded failure response rather than a hanging request.
+- PDF endpoint tests verified uploaded PDF extraction and matching date results.
+- Full regression command `python -m pytest tests/ -v`: **94 passed, 0 failed, 3 warnings**. See `test_results_day19.txt` for the captured run.

@@ -331,7 +331,6 @@ def health_check_route():
 def submit_prompt(request: PromptRequest):
     prompt = request.prompt.strip()
 
-    # Return HTTP 400 for empty or whitespace-only prompts.
     if not prompt:
         raise HTTPException(
             status_code=400,
@@ -339,29 +338,8 @@ def submit_prompt(request: PromptRequest):
         )
 
     request_id = str(uuid4())
-    result = run_prompt(prompt, request_id)
-    return result
-
-
-@app.post("/api/prompt")
-def submit_prompt_route(request: PromptRequest):
-    prompt = request.prompt.strip()
-
-    if not prompt:
-        raise HTTPException(
-            status_code=400,
-            detail="Prompt cannot be empty",
-        )
-
-    request_id = str(uuid4())
-    result = run_prompt(prompt, request_id)
-
     try:
-        result = run_prompt(
-            prompt,
-            request_id,
-        )
-
+        result = run_prompt(prompt, request_id)
     except Exception as exc:
         logger.exception("Prompt processing failed")
         raise HTTPException(

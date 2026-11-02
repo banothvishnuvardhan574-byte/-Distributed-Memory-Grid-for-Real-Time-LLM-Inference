@@ -2,26 +2,54 @@
 
 ## Run locally
 
-Start the FastAPI backend from the repository root:
+Start the backend from the repository root in one terminal:
 
-```text
+```powershell
+.\.venv\Scripts\Activate.ps1
 python -m uvicorn app.main:app --reload
 ```
 
-Then start the frontend:
+In a second terminal, install dependencies and start Vite from the `frontend`
+directory:
 
-```text
+```powershell
+cd frontend
+npm ci
 npm run dev
 ```
 
-The Vite development server runs on port 3000 and proxies `/api` requests to
-`http://localhost:8000` by default. To call a different backend directly, set
-`VITE_API_URL` in a local `.env.local` file, for example:
+Open <http://localhost:5173>. Vite proxies `/health` and `/api` requests to
+`http://localhost:8000` by default, so no frontend environment file is needed
+for the local setup.
+
+To call a different backend directly, set `VITE_API_URL` in
+`frontend/.env.local`, for example:
 
 ```text
 VITE_API_URL=http://localhost:8000
 ```
 
-Direct cross-origin requests are enabled for the default local frontend origins.
-For another frontend origin, set `CORS_ORIGINS` for the backend to a JSON array
-of allowed origins, such as `["https://memorygrid.example"]`.
+Restart Vite after changing the environment file. For a different frontend
+origin, configure the backend's `CORS_ORIGINS` setting to allow that origin.
+
+## Demo workflows
+
+- **Prompt:** Enter a prompt and submit it. The response panel shows the worker
+  response, request status, latency, request ID, and cache result. Repeating a
+  prompt within the cache lifetime should report a cache hit.
+- **PDF lookup:** In the PDF lookup section, choose a PDF and optionally specify
+  a day and month, then select **Find date**. The result shows the target date,
+  match count, and matching sentences, or a no-matches message. Upload or
+  processing failures are shown in the UI.
+
+The backend currently uses a stub inference function, so prompt responses are
+for demonstrating API, cache, and UI behavior rather than production inference.
+
+## Frontend checks
+
+Run these commands from `frontend`:
+
+```powershell
+npm run build
+npm run lint
+```

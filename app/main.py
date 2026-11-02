@@ -338,7 +338,6 @@ def submit_prompt(request: PromptRequest):
         )
 
     request_id = str(uuid4())
-
     try:
         result = run_prompt(prompt, request_id)
     except Exception as exc:

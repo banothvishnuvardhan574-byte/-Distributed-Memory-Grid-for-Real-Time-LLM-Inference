@@ -69,7 +69,8 @@ The API sends the following information to the worker:
 
 ## 6. Current Implementation Status
 
-The worker module and its tests have been implemented.
+The worker module is connected to the prompt API and covered by worker/API
+integration tests.
 
 The current worker:
 - Trims leading and trailing whitespace from prompts.
@@ -77,11 +78,12 @@ The current worker:
 - Runs inference in a separate process.
 - Handles inference exceptions.
 - Terminates inference when the configured timeout is exceeded.
-- Returns a request ID, status, and response message.
+- Returns a request ID, status, response, and error field.
 
-**Integration note:** The current worker response does not yet fully match the agreed JSON format. It returns the failure message in `response` and does not include a separate `error` field. The worker also needs to be connected to the API's inference flow.
-
-The current API accepts prompts but does not yet connect them to actual LLM inference.
+The API currently uses its local stub inference function; a real LLM provider
+is not connected. API HTTP status codes and JSON examples are recorded in
+[`test_results.md`](./test_results.md) based on the current implementation and
+automated tests.
 
 ## 7. Testing
 
@@ -101,4 +103,3 @@ Run the command again after making changes to verify the current result.
 2. Complete API and worker integration when the team is ready.
 3. Run the worker tests and relevant project tests.
 4. Commit and push the completed changes for team-leader review.
-

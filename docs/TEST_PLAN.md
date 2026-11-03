@@ -45,12 +45,13 @@ future baseline:
 
 ## Latest run
 
-- Command: `.\.venv\Scripts\python.exe -m pytest tests/test_main.py -q -s`
-- Result: **6 passed**, 0 failed.
-- Regression command: `.\.venv\Scripts\python.exe -m pytest tests/test_main.py tests/test_day5_integration.py tests/test_day9_api.py tests/test_day11_prompt_api.py tests/test_day13_validation.py tests/test_day16_integration.py tests/test_api_worker.py -q`
-- Regression result: **30 passed**, 0 failed.
-- The test file also covers the previously requested prompt/cache acceptance
-  cases. Its one-run request timings are printed by pytest, but are not a
-  performance baseline.
-- Three deprecation warnings from the existing Starlette/FastAPI test setup
-  were reported; none caused a failure.
+- Date: **2026-11-02**
+- Command: `.\.venv\Scripts\python.exe -m pytest -q`
+- Result: **94 passed**, 0 failed; 3 deprecation warnings from the existing
+  Starlette/FastAPI test setup.
+- The complete test inventory, frontend scripts, coverage classification,
+  actual results, and API contract snapshot are recorded in
+  [test_results.md](./test_results.md).
+- TestClient results are in-process functional checks and do not represent a
+  live-server/network end-to-end run. The acceptance test's one-run request
+  timings are not a performance baseline.

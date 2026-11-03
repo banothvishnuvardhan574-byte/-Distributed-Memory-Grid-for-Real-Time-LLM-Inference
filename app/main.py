@@ -545,3 +545,29 @@ async def extract_today_pdf_matches(
             "Only the requested date has been extracted."
         ),
     }
+
+
+@app.get("/api/pdf/search")
+def pdf_search(q: str):
+    query = q.strip()
+    if not query:
+        raise HTTPException(
+            status_code=400,
+            detail="Query cannot be empty",
+        )
+
+    results = []
+    for node in grid.nodes:
+        for key in list(node.store):
+            if not key.startswith("pdf:"):
+                continue
+
+            text = node.get(key)
+            if text is not None and query.casefold() in text.casefold():
+                results.append({"key": key, "snippet": text[:200]})
+
+    return {
+        "query": query,
+        "matches": len(results),
+        "results": results,
+    }

@@ -4,6 +4,7 @@ import logging
 import re
 import threading
 import time
+from collections import deque
 from calendar import month_abbr, month_name
 from datetime import date
 from typing import Any
@@ -106,6 +107,8 @@ cache_metrics = {
 
 jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = threading.Lock()
+recent_prompts: deque[dict[str, str]] = deque(maxlen=50)
+recent_prompts_lock = threading.Lock()
 
 
 @app.on_event("startup")
@@ -361,6 +364,16 @@ def submit_prompt(request: PromptRequest):
             detail="Prompt processing failed",
         ) from exc
 
+    with recent_prompts_lock:
+        recent_prompts.appendleft(
+            {
+                "request_id": request_id,
+                "prompt": prompt,
+                "status": result.get("status", "failed"),
+                "cache": result.get("cache", "miss"),
+            }
+        )
+
     if result.get("status") != "completed":
         raise HTTPException(
             status_code=500,
@@ -375,6 +388,13 @@ def submit_prompt(request: PromptRequest):
         cache=result.get("cache", "miss"),
         error=result.get("error"),
     )
+
+
+@app.get("/api/prompts/recent")
+def prompts_recent():
+    with recent_prompts_lock:
+        prompts = list(recent_prompts)
+    return {"count": len(prompts), "prompts": prompts}
 
 
 def _run_job(job_id: str, prompt: str) -> None:

@@ -9,7 +9,16 @@ from datetime import date
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -416,6 +425,20 @@ def submit_job(request: PromptRequest):
         ) from exc
 
     return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/api/jobs")
+def list_jobs(limit: int = Query(default=20, ge=1, le=100)):
+    with jobs_lock:
+        recent_jobs = list(jobs.items())[::-1][:limit]
+
+    return {
+        "count": len(recent_jobs),
+        "jobs": [
+            {"job_id": job_id, "status": job["status"]}
+            for job_id, job in recent_jobs
+        ],
+    }
 
 
 @app.get("/api/jobs/{job_id}")

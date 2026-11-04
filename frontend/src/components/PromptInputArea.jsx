@@ -94,10 +94,24 @@ export default function PromptInputArea({
                 backgroundColor: 'rgba(99, 102, 241, 0.08)',
                 color: '#cbd5e1',
                 border: '1px solid rgba(99, 102, 241, 0.2)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease-in-out',
                 '&:hover': {
-                  backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                  backgroundColor: 'rgba(99, 102, 241, 0.22)',
                   borderColor: '#818cf8',
                   color: '#ffffff',
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 2px 8px rgba(99, 102, 241, 0.25)',
+                },
+                '&:focus-visible': {
+                  outline: '2px solid #818cf8',
+                  outlineOffset: '2px',
+                  backgroundColor: 'rgba(99, 102, 241, 0.25)',
+                  borderColor: '#a5b4fc',
+                  color: '#ffffff',
+                },
+                '&:active': {
+                  transform: 'translateY(0)',
                 },
               }}
             />

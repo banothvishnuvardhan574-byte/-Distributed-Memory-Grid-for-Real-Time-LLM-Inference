@@ -27,8 +27,10 @@ def test_metrics_counts_requests_by_endpoint():
 def test_metrics_reports_cache_and_job_totals():
     main.grid_clear()
     prompt = f"metrics cache test {uuid4()}"
-    assert client.post("/api/prompt", json={"prompt": prompt}).json()["cache"] == "miss"
-    assert client.post("/api/prompt", json={"prompt": prompt}).json()["cache"] == "hit"
+    first = client.post("/api/prompt", json={"prompt": prompt})
+    second = client.post("/api/prompt", json={"prompt": prompt})
+    assert first.json()["cache"] == "miss"
+    assert second.json()["cache"] == "hit"
 
     response = client.get("/api/metrics")
 

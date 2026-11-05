@@ -19,7 +19,13 @@ LLM MemoryGrid is a prototype application that provides an in-memory cache for p
 | --- | --- | --- |
 | GET | `/health` | Check API health. |
 | POST | `/api/prompt` | Submit a prompt; check the cache and run worker inference on a miss. |
+| POST | `/api/prompts/batch` | Run up to 20 prompts and return each inference result. |
+| GET | `/api/prompts/recent` | Read the latest 50 prompt results. |
+| POST | `/api/jobs` | Submit a prompt for asynchronous inference. |
+| GET | `/api/jobs/{job_id}` | Read an asynchronous job's status and result. |
 | POST | `/api/pdf/today` | Upload a PDF, extract its text, and find sentences matching a date. |
+| GET | `/api/pdf/search` | Search extracted text from cached PDFs. |
+| GET | `/api/metrics` | Read request counts, cache hits/misses, and job totals. |
 | GET | `/api/grid/config` | View grid configuration. |
 | GET | `/api/grid/health` | Check grid health and cached-entry totals. |
 | GET | `/api/grid/stats` | View per-node entries and cache hit/miss/hit-rate metrics. |

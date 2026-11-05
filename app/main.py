@@ -563,8 +563,22 @@ def pdf_search(q: str):
                 continue
 
             text = node.get(key)
-            if text is not None and query.casefold() in text.casefold():
-                results.append({"key": key, "snippet": text[:200]})
+            if text is None:
+                continue
+
+            match_index = text.casefold().find(query.casefold())
+            if match_index >= 0:
+                snippet_start = max(0, match_index - 80)
+                snippet_end = min(
+                    len(text),
+                    max(match_index + len(query) + 120, snippet_start + 200),
+                )
+                results.append(
+                    {
+                        "key": key,
+                        "snippet": text[snippet_start:snippet_end],
+                    }
+                )
 
     return {
         "query": query,

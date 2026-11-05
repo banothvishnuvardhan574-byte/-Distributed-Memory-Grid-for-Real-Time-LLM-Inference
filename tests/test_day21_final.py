@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+import threading
 import time
 from uuid import uuid4
 
@@ -36,6 +38,45 @@ def test_job_lifecycle():
     job = _wait_for_job(job_id)
     assert job["status"] == "completed"
     assert job["result"]["response"]
+
+
+def test_job_submission_returns_before_inference_finishes(monkeypatch):
+    inference_started = threading.Event()
+    release_inference = threading.Event()
+
+    def wait_for_release(prompt: str, request_id: str) -> dict:
+        inference_started.set()
+        if not release_inference.wait(timeout=5):
+            raise TimeoutError("Test did not release the inference worker")
+        return {
+            "request_id": request_id,
+            "status": "completed",
+            "response": "finished",
+            "cache": "miss",
+            "error": None,
+        }
+
+    monkeypatch.setattr(main, "run_prompt", wait_for_release)
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(
+        client.post,
+        "/api/jobs",
+        json={"prompt": f"day21 nonblocking {uuid4()}"},
+    )
+    job_id: str | None = None
+
+    try:
+        assert inference_started.wait(timeout=2)
+        response = future.result(timeout=2)
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+        assert client.get(f"/api/jobs/{job_id}").json()["status"] == "running"
+    finally:
+        release_inference.set()
+        executor.shutdown(wait=True)
+
+    assert job_id is not None
+    assert _wait_for_job(job_id)["status"] == "completed"
 
 
 def test_job_reports_worker_failure(monkeypatch):

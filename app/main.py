@@ -42,6 +42,12 @@ app = FastAPI(
 async def log_requests(request: Request, call_next) -> Response:
     start = time.time()
     response = await call_next(request)
+    with metrics_lock:
+        request_metrics["total"] += 1
+        endpoint = request.url.path
+        request_metrics["by_endpoint"][endpoint] = (
+            request_metrics["by_endpoint"].get(endpoint, 0) + 1
+        )
     logger.info(
         "%s %s -> %s (%.1fms)",
         request.method,
@@ -95,6 +101,11 @@ cache_metrics = {
     "hits": 0,
     "misses": 0,
 }
+request_metrics: dict[str, Any] = {
+    "total": 0,
+    "by_endpoint": {},
+}
+metrics_lock = threading.Lock()
 
 jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = threading.Lock()
@@ -126,7 +137,8 @@ def run_prompt(prompt: str, request_id: str) -> dict:
     cached = grid.get(prompt)
 
     if cached is not None:
-        cache_metrics["hits"] += 1
+        with metrics_lock:
+            cache_metrics["hits"] += 1
 
         return {
             "request_id": request_id,
@@ -145,7 +157,8 @@ def run_prompt(prompt: str, request_id: str) -> dict:
     # Count a miss only when inference succeeds.
     if result.get("status") == "completed":
         grid.set(prompt, result["response"])
-        cache_metrics["misses"] += 1
+        with metrics_lock:
+            cache_metrics["misses"] += 1
         result["cache"] = "miss"
 
     return result
@@ -388,6 +401,24 @@ def prompts_recent():
     return {"count": len(prompts), "prompts": prompts}
 
 
+@app.get("/api/metrics")
+def metrics():
+    with metrics_lock:
+        requests = {
+            "total": request_metrics["total"],
+            "by_endpoint": dict(request_metrics["by_endpoint"]),
+        }
+        cache = dict(cache_metrics)
+    with jobs_lock:
+        job_total = len(jobs)
+
+    return {
+        "requests": requests,
+        "cache": cache,
+        "jobs": {"total": job_total},
+    }
+
+
 def _run_job(job_id: str, prompt: str) -> None:
     try:
         result = run_prompt(prompt, job_id)
@@ -477,8 +508,9 @@ def grid_health():
 # Memory grid statistics endpoint
 @app.get("/api/grid/stats")
 def grid_stats():
-    hits = cache_metrics["hits"]
-    misses = cache_metrics["misses"]
+    with metrics_lock:
+        hits = cache_metrics["hits"]
+        misses = cache_metrics["misses"]
     total_requests = hits + misses
 
     return {
@@ -499,8 +531,9 @@ def grid_clear():
     for node in grid.nodes:
         node.clear()
 
-    cache_metrics["hits"] = 0
-    cache_metrics["misses"] = 0
+    with metrics_lock:
+        cache_metrics["hits"] = 0
+        cache_metrics["misses"] = 0
 
     return {
         "status": "cleared",

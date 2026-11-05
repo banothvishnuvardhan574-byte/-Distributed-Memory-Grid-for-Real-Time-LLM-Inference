@@ -1,13 +1,27 @@
+
 import io
 import logging
 import re
+import threading
+import time
+from collections import deque
 from calendar import month_abbr, month_name
 from datetime import date
+from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
@@ -19,12 +33,13 @@ except ImportError:
     PdfReader = None
 
 
-# Logging
+# --------------------------------------------------
+# Logging and application setup
+# --------------------------------------------------
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("memgrid")
 
-
-# FastAPI application
 app = FastAPI(
     title=settings.app_name,
     description="Backend API for real-time LLM inference",
@@ -32,7 +47,20 @@ app = FastAPI(
 )
 
 
-# CORS configuration
+@app.middleware("http")
+async def log_requests(request: Request, call_next) -> Response:
+    start = time.time()
+    response = await call_next(request)
+    logger.info(
+        "%s %s -> %s (%.1fms)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        (time.time() - start) * 1000,
+    )
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(
@@ -43,12 +71,17 @@ app.add_middleware(
 )
 
 
-# Request model
+# --------------------------------------------------
+# Request and response models
+# --------------------------------------------------
+
 class PromptRequest(BaseModel):
-    prompt: str
+    # Keep max_length, but do not use min_length.
+    # Empty prompts must reach the endpoint and return HTTP 400.
+    prompt: str = Field(..., max_length=4000)
 
 
-# Response model - Day 9
+# Response model
 class PromptResponse(BaseModel):
     request_id: str
     status: str
@@ -58,12 +91,24 @@ class PromptResponse(BaseModel):
     error: str | None = None
 
 
-# Initialize memory grid
+# --------------------------------------------------
+# Memory grid and metrics
+# --------------------------------------------------
+
 grid = MemoryGrid(
     node_count=settings.node_count,
     capacity_per_node=settings.cache_size_per_node,
 )
-cache_metrics = {"hits": 0, "misses": 0}
+
+cache_metrics = {
+    "hits": 0,
+    "misses": 0,
+}
+
+jobs: dict[str, dict[str, Any]] = {}
+jobs_lock = threading.Lock()
+recent_prompts: deque[dict[str, str]] = deque(maxlen=50)
+recent_prompts_lock = threading.Lock()
 
 
 @app.on_event("startup")
@@ -76,17 +121,22 @@ def startup():
     )
 
 
-# Stub inference function
+# --------------------------------------------------
+# Prompt processing
+# --------------------------------------------------
+
 def stub_inference(prompt: str) -> str:
+    """Fallback inference function used by the worker."""
     return f"[stub] echo: {prompt[:200]}"
 
 
-# Process prompt using memory grid and worker
 def run_prompt(prompt: str, request_id: str) -> dict:
+    """Return a cached response or invoke the worker."""
     cached = grid.get(prompt)
 
     if cached is not None:
         cache_metrics["hits"] += 1
+
         return {
             "request_id": request_id,
             "status": "completed",
@@ -95,8 +145,13 @@ def run_prompt(prompt: str, request_id: str) -> dict:
             "error": None,
         }
 
-    result = process_prompt(request_id, prompt, stub_inference)
+    result = process_prompt(
+        request_id,
+        prompt,
+        stub_inference,
+    )
 
+    # Count a miss only when inference succeeds.
     if result.get("status") == "completed":
         grid.set(prompt, result["response"])
         cache_metrics["misses"] += 1
@@ -105,18 +160,26 @@ def run_prompt(prompt: str, request_id: str) -> dict:
     return result
 
 
-# Find sentences containing a requested date
+# --------------------------------------------------
+# PDF date matching
+# --------------------------------------------------
+
 def find_today_date_matches(
     text: str,
     day: int | None = None,
     month: str | None = None,
 ) -> list[str]:
+    """Find sentences containing the requested day and month."""
     today = date.today()
+
     if day is None:
         day = today.day
+
     if month is None:
         month = month_abbr[today.month]
+
     month = month.strip().lower()
+
     if not text or not month:
         return []
 
@@ -124,62 +187,125 @@ def find_today_date_matches(
         (
             index
             for index in range(1, 13)
-            if month in (month_abbr[index].lower(), month_name[index].lower())
+            if month in (
+                month_abbr[index].lower(),
+                month_name[index].lower(),
+            )
         ),
         None,
     )
+
     month_names = {month}
+
     if month_index is not None:
         month_names.update(
-            {month_abbr[month_index].lower(), month_name[month_index].lower()}
+            {
+                month_abbr[month_index].lower(),
+                month_name[month_index].lower(),
+            }
         )
+
     month_pattern = "(?:" + "|".join(
-        re.escape(name) for name in sorted(month_names, key=len, reverse=True)
+        re.escape(name)
+        for name in sorted(
+            month_names,
+            key=len,
+            reverse=True,
+        )
     ) + ")"
+
     day_pattern = rf"{day}(?:st|nd|rd|th)?"
 
     patterns = [
-        re.compile(rf"(?i)\b{day_pattern}\s*(?:/|-|\.)\s*{month_pattern}\b"),
-        re.compile(rf"(?i)\b{day_pattern}\s+{month_pattern}\b"),
-        re.compile(rf"(?i)\b{month_pattern}\s+{day_pattern}\b"),
+        re.compile(
+            rf"(?i)\b{day_pattern}\s*(?:/|-|\.)\s*"
+            rf"{month_pattern}\b"
+        ),
+        re.compile(
+            rf"(?i)\b{day_pattern}\s+{month_pattern}\b"
+        ),
+        re.compile(
+            rf"(?i)\b{month_pattern}\s+{day_pattern}\b"
+        ),
     ]
+
     if month_index is not None:
         numeric_month = f"{month_index:02d}"
+
         patterns.extend(
             [
-                re.compile(rf"\b{day}\s*(?:/|-)\s*{numeric_month}(?!\d)"),
-                re.compile(rf"\b{numeric_month}\s*(?:/|-)\s*{day_pattern}(?!\d)"),
+                re.compile(
+                    rf"\b{day}\s*(?:/|-)\s*"
+                    rf"{numeric_month}(?!\d)"
+                ),
+                re.compile(
+                    rf"\b{numeric_month}\s*(?:/|-)\s*"
+                    rf"{day_pattern}(?!\d)"
+                ),
             ]
         )
 
     sentences = [
         sentence.strip()
-        for sentence in re.split(r"\n+|(?<=[.!?])\s+", text)
+        for sentence in re.split(
+            r"\n+|(?<=[.!?])\s+",
+            text,
+        )
         if sentence.strip()
     ]
 
     return [
         sentence
         for sentence in sentences
-        if any(pattern.search(sentence) for pattern in patterns)
+        if any(
+            pattern.search(sentence)
+            for pattern in patterns
+        )
     ]
 
 
-# Extract text from PDF
 def extract_pdf_text(file_bytes: bytes) -> str:
+    """Extract text from uploaded PDF bytes."""
+    if not file_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to read PDF content: uploaded PDF is empty.",
+        )
+
     if PdfReader is None:
         raise HTTPException(
             status_code=500,
-            detail="PDF support is not installed. Please install pypdf.",
+            detail=(
+                "PDF support is not installed. "
+                "Please install pypdf."
+            ),
         )
 
     try:
         reader = PdfReader(io.BytesIO(file_bytes))
+
+        if reader.is_encrypted:
+            try:
+                if not reader.decrypt(""):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Encrypted PDFs are not supported.",
+                    )
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Unable to read encrypted PDF.",
+                ) from exc
+
         return "\n".join(
             page.extract_text() or ""
             for page in reader.pages
         )
 
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -187,11 +313,16 @@ def extract_pdf_text(file_bytes: bytes) -> str:
         ) from exc
 
 
+# Normalize extracted PDF text
 def normalize_pdf_text(text: str) -> str:
+    """Normalize whitespace in extracted PDF text."""
     return re.sub(r"\s+", " ", text).strip()
 
 
-# Home endpoint
+# --------------------------------------------------
+# Home and health endpoints
+# --------------------------------------------------
+
 @app.get("/")
 def home():
     return {
@@ -200,17 +331,20 @@ def home():
     }
 
 
-# Health endpoint
-@app.get("/health")
 def health_check():
     return {"status": "ok"}
 
 
-# Prompt endpoint - updated for Day 9
-@app.post(
-    "/api/prompt",
-    response_model=PromptResponse,
-)
+@app.get("/health")
+def health_check_route():
+    return {"status": "healthy"}
+
+
+# --------------------------------------------------
+# Prompt endpoint
+# --------------------------------------------------
+
+@app.post("/api/prompt", response_model=PromptResponse)
 def submit_prompt(request: PromptRequest):
     prompt = request.prompt.strip()
 
@@ -221,19 +355,25 @@ def submit_prompt(request: PromptRequest):
         )
 
     request_id = str(uuid4())
-
     try:
         result = run_prompt(prompt, request_id)
-
     except Exception as exc:
         logger.exception("Prompt processing failed")
-
         raise HTTPException(
             status_code=500,
             detail="Prompt processing failed",
         ) from exc
 
-    # Surface worker failures as HTTP 500
+    with recent_prompts_lock:
+        recent_prompts.appendleft(
+            {
+                "request_id": request_id,
+                "prompt": prompt,
+                "status": result.get("status", "failed"),
+                "cache": result.get("cache", "miss"),
+            }
+        )
+
     if result.get("status") != "completed":
         raise HTTPException(
             status_code=500,
@@ -250,7 +390,93 @@ def submit_prompt(request: PromptRequest):
     )
 
 
-# Memory grid configuration
+@app.get("/api/prompts/recent")
+def prompts_recent():
+    with recent_prompts_lock:
+        prompts = list(recent_prompts)
+    return {"count": len(prompts), "prompts": prompts}
+
+
+def _run_job(job_id: str, prompt: str) -> None:
+    try:
+        result = run_prompt(prompt, job_id)
+    except Exception:
+        logger.exception("Async prompt job %s failed", job_id)
+        result = {
+            "request_id": job_id,
+            "status": "failed",
+            "response": None,
+            "error": "Prompt processing failed",
+        }
+
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": result.get("status", "failed"),
+            "result": result,
+        }
+
+
+@app.post("/api/jobs", status_code=202)
+def submit_job(request: PromptRequest):
+    prompt = request.prompt.strip()
+    if not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="Prompt cannot be empty",
+        )
+
+    job_id = str(uuid4())
+    with jobs_lock:
+        jobs[job_id] = {"status": "running", "result": None}
+
+    try:
+        threading.Thread(
+            target=_run_job,
+            args=(job_id, prompt),
+            daemon=True,
+        ).start()
+    except RuntimeError as exc:
+        with jobs_lock:
+            jobs.pop(job_id, None)
+        logger.exception("Unable to start async prompt job %s", job_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start prompt job",
+        ) from exc
+
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/api/jobs")
+def list_jobs(limit: int = Query(default=20, ge=1, le=100)):
+    with jobs_lock:
+        recent_jobs = list(jobs.items())[::-1][:limit]
+
+    return {
+        "count": len(recent_jobs),
+        "jobs": [
+            {"job_id": job_id, "status": job["status"]}
+            for job_id, job in recent_jobs
+        ],
+    }
+
+
+@app.get("/api/jobs/{job_id}")
+def job_status(job_id: str):
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Job not found",
+            )
+        return {"job_id": job_id, **job}
+
+
+# --------------------------------------------------
+# Grid configuration and statistics
+# --------------------------------------------------
+
 @app.get("/api/grid/config")
 def grid_config():
     return {
@@ -260,20 +486,37 @@ def grid_config():
     }
 
 
-# Memory grid statistics
+@app.get("/api/grid/health")
+def grid_health():
+    stats = grid.stats()
+    return {
+        "status": "healthy",
+        "node_count": len(stats),
+        "total_cached_entries": sum(node["entries"] for node in stats),
+        "capacity_per_node": settings.cache_size_per_node,
+    }
+
+
+# Memory grid statistics endpoint
 @app.get("/api/grid/stats")
 def grid_stats():
     hits = cache_metrics["hits"]
     misses = cache_metrics["misses"]
     total_requests = hits + misses
+
     return {
         "nodes": grid.stats(),
         "cache_hits": hits,
         "cache_misses": misses,
-        "hit_rate": hits / total_requests if total_requests else 0.0,
+        "hit_rate": (
+            hits / total_requests
+            if total_requests
+            else 0.0
+        ),
     }
 
 
+# Clear memory grid and reset cache metrics
 @app.post("/api/grid/clear", status_code=200)
 def grid_clear():
     for node in grid.nodes:
@@ -281,46 +524,107 @@ def grid_clear():
 
     cache_metrics["hits"] = 0
     cache_metrics["misses"] = 0
-    return {"status": "cleared", "nodes": len(grid.nodes)}
+
+    return {
+        "status": "cleared",
+        "nodes": len(grid.nodes),
+    }
 
 
-# PDF date extraction endpoint
+# --------------------------------------------------
+# PDF endpoint
+# --------------------------------------------------
+
 @app.post("/api/pdf/today")
 async def extract_today_pdf_matches(
     file: UploadFile = File(...),
     day: int | None = Form(None),
     month: str | None = Form(None),
 ):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
+    if (
+        not file.filename
+        or not file.filename.lower().endswith(".pdf")
+    ):
         raise HTTPException(
             status_code=400,
             detail="Please upload a PDF file.",
         )
 
     file_bytes = await file.read()
+
     text = extract_pdf_text(file_bytes)
     normalized_text = normalize_pdf_text(text)
-    request_id = str(uuid4())
-    grid.set(f"pdf:{file.filename}:{request_id}", normalized_text)
 
     today = date.today()
-    day = day if day is not None else today.day
-    month = (
+
+    target_day = day if day is not None else today.day
+    target_month = (
         month if month is not None else month_abbr[today.month]
     ).strip().lower()
+
     matches = find_today_date_matches(
         normalized_text,
-        day=day,
-        month=month,
+        day=target_day,
+        month=target_month,
+    )
+
+    # Cache PDF text for 60 seconds.
+    # This requires MemoryGrid.set(..., ttl=60) support.
+    pdf_cache_key = f"pdf:{file.filename}:{uuid4()}"
+
+    grid.set(
+        pdf_cache_key,
+        normalized_text,
+        ttl=60,
     )
 
     return {
         "file_name": file.filename,
-        "target_date": f"{day}/{month.lower()}",
+        "target_date": f"{target_day}/{target_month}",
         "matches_found": len(matches),
         "matches": matches[:10],
         "message": (
             "Small PDF check complete. "
             "Only the requested date has been extracted."
         ),
+    }
+
+
+@app.get("/api/pdf/search")
+def pdf_search(q: str):
+    query = q.strip()
+    if not query:
+        raise HTTPException(
+            status_code=400,
+            detail="Query cannot be empty",
+        )
+
+    results = []
+    for node in grid.nodes:
+        for key in list(node.store):
+            if not key.startswith("pdf:"):
+                continue
+
+            text = node.get(key)
+            if text is None:
+                continue
+
+            match_index = text.casefold().find(query.casefold())
+            if match_index >= 0:
+                snippet_start = max(0, match_index - 80)
+                snippet_end = min(
+                    len(text),
+                    max(match_index + len(query) + 120, snippet_start + 200),
+                )
+                results.append(
+                    {
+                        "key": key,
+                        "snippet": text[snippet_start:snippet_end],
+                    }
+                )
+
+    return {
+        "query": query,
+        "matches": len(results),
+        "results": results,
     }

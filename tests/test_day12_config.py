@@ -8,6 +8,7 @@ from app.main import app, grid
 def test_memory_grid_applies_capacity_to_every_node():
     memory_grid = MemoryGrid(node_count=2, capacity_per_node=5)
 
+    assert len(memory_grid.nodes) == 2
     assert [node.capacity for node in memory_grid.nodes] == [5, 5]
 
 
@@ -23,8 +24,15 @@ def test_grid_config_endpoint_returns_active_settings():
         response = client.get("/api/grid/config")
 
     assert response.status_code == 200
-    assert response.json() == {
+
+    body = response.json()
+
+    assert body == {
         "node_count": settings.node_count,
         "cache_size_per_node": settings.cache_size_per_node,
         "default_ttl_seconds": settings.default_ttl_seconds,
     }
+
+    assert body["node_count"] >= 1
+    assert body["cache_size_per_node"] >= 1
+    assert body["default_ttl_seconds"] >= 1

@@ -63,3 +63,13 @@ def test_corrupt_pdf_raises_http_exception():
         extract_pdf_text(b"This is not a valid PDF")
 
     assert exc_info.value.status_code == 400
+
+
+def test_extract_text_from_valid_pdf_without_text_returns_empty_string():
+    writer = PdfWriter()
+    writer.add_blank_page(width=300, height=300)
+
+    output = io.BytesIO()
+    writer.write(output)
+
+    assert extract_pdf_text(output.getvalue()) == ""    

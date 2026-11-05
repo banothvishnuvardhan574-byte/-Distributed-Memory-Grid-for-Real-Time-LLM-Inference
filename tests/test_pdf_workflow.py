@@ -50,3 +50,15 @@ def test_find_today_date_matches_defaults_to_current_date(monkeypatch):
     text = "Meeting on 22 October.\nPrevious meeting on 21 October."
 
     assert main.find_today_date_matches(text) == ["Meeting on 22 October."]
+
+
+def test_find_today_date_matches_normalizes_month_input():
+    text = "Review meeting on 11 October."
+
+    matches = main.find_today_date_matches(
+        text,
+        day=11,
+        month=" OCT ",
+    )
+
+    assert matches == [text]

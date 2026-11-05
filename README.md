@@ -1,75 +1,158 @@
-# Distributed Memory Grid for Real-Time LLM Inference
+ suraj-inference
+# LLM MemoryGrid — Model & Inference Integration
 
-LLM MemoryGrid is a FastAPI backend and React frontend for testing prompt
-inference with a hash-routed, in-memory cache. The current backend uses a stub
-inference function, making the project runnable without an external LLM
-provider.
+**Component Owner:** Suraj Kotrange  
+**Assigned Branch:** `suraj-inference`  
+**Execution Window:** 2–14 November 2026  
+**Primary Hand-off:** `generate_response(prompt: str) -> str` interface for `nikhila-worker` and `vishnu-backend`.
 
-## Requirements
+---
 
-- Python 3.10 or newer
-- Node.js and npm (for the frontend)
+## 1. Overview & Objective
 
-## Install and run the backend
+This component provides a lightweight, robust, reproducible local inference pipeline for the LLM MemoryGrid demonstrator. In accordance with the project rules:
+* Model execution is isolated behind a single public interface: `generate_response(prompt: str) -> str`.
+* The adapter enforces single-instance model loading in memory (no reloading weights per prompt).
+* Generation parameters are strictly bounded (max tokens, timeout, and explicit error states).
+* Stub/echo outputs are never disguised as real generation.
 
-From the repository root, create and activate a virtual environment, then
-install the Python dependencies:
+---
 
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+## 2. Hardware Constraints Summary
+
+From empirical host benchmarking on 3 Nov 2026:
+* **CPU:** 2 vCPUs (Intel Xeon 6985P-C)
+* **RAM:** 7.8 GiB total (~6.7 GiB free)
+* **GPU:** None (CPU inference only)
+* **Storage:** 18 GiB free disk
+
+**Recommended Model:** `Qwen2.5-0.5B-Instruct` (GGUF Q4_K_M, ~380 MB download, ~650 MB RAM working set).
+
+Full feasibility study available in: [`docs/INFERENCE_OPTIONS.md`](docs/INFERENCE_OPTIONS.md).
+
+---
+
+## 3. Project Structure
+
+```
+├── .gitignore
+├── docs/
+│   └── INFERENCE_OPTIONS.md          # Hardware audit, model benchmarks & Vishnu proposal
+├── inference/
+│   ├── __init__.py                   # Package exports
+│   ├── adapter.py                    # InferenceAdapter class & generate_response contract
+│   └── exceptions.py                 # Custom error hierarchy (ModelNotReadyError, etc.)
+├── examples/
+│   └── worker_integration_example.py # Minimal callable example for Nikhila
+└── tests/
+    └── test_inference.py             # Unit & contract tests for Sagar's test runner
 ```
 
-On macOS or Linux, activate the environment with
-`source .venv/bin/activate` instead.
+---
 
-Start the API:
+## 4. Quick Start & Setup
 
-```text
+### Environment Setup
+```bash
+# Recommended Python version: 3.11+
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install runtime dependencies
+pip install llama-cpp-python
+```
+
+### Running Unit Tests
+```bash
+python3 -m unittest discover tests
+```
+
+### Worker Integration Pattern
+```python
+from inference import generate_response, ModelNotReadyError, InferenceTimeoutError
+
+try:
+    response_text = generate_response("Explain distributed inference", max_tokens=128)
+    print("Response:", response_text)
+except ModelNotReadyError as e:
+    print("Model not loaded:", e)
+except InferenceTimeoutError as e:
+    print("Timeout:", e)
+```
+
+# Distributed Memory Grid for Real-Time LLM Inference
+
+A prototype prompt-processing application with a FastAPI backend, a React/Vite
+portal, and an in-memory cache distributed across memory nodes. Prompt inference
+currently uses a deterministic stub rather than a production LLM provider.
+
+## Features
+
+- Prompt API with cache miss/hit responses and process-isolated worker handling.
+- Grid health and statistics, including per-node entries and cache hit rate.
+- Stable hash-modulo routing, TTL expiration, and per-node LRU eviction.
+- PDF upload for text extraction and date matching.
+- React portal for prompt submission, PDF lookup, and live grid metrics.
+
+## Quick start
+
+Requirements: Python 3.10 or newer, Node.js 18 or newer, and npm.
+
+Install backend dependencies and start the API from the repository root:
+
+```powershell
+python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload
 ```
 
-The backend listens at <http://127.0.0.1:8000>. Interactive API documentation
-is available at <http://127.0.0.1:8000/docs>.
+In another terminal, install frontend dependencies and start Vite:
 
-## API endpoints
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | `/` | API welcome message and readiness status. |
-| `GET` | `/health` | Health check; returns `{"status":"ok"}`. |
-| `POST` | `/api/prompt` | Submit JSON such as `{"prompt":"Hello"}`. Returns the response, request ID, and `hit`/`miss` cache result. Empty prompts return HTTP 400; worker failures return HTTP 500. |
-| `GET` | `/api/grid/stats` | Per-node cache details and aggregate `cache_hits`, `cache_misses`, and `hit_rate` (0.0 before any cache requests). |
-| `POST` | `/api/grid/clear` | Clear all grid entries and reset cache metrics. |
-| `POST` | `/api/pdf/today` | Upload a PDF as multipart field `file`. Optional multipart fields `day` and `month` choose a date; omitted fields default to today's corresponding date parts. Returns matching text and the effective target date. |
-
-For example, a PDF request with an explicit date can be made with:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/pdf/today -F "file=@sample.pdf" -F "day=22" -F "month=oct"
-```
-
-The API accepts PDF filenames ending in `.pdf` and uses `pypdf` to extract
-their text.
-
-## Run the tests
-
-From the repository root:
-
-```text
-python -m pytest tests/ -v
-```
-
-## Run the frontend
-
-In a second terminal:
-
-```text
-cd frontend
+```powershell
+Set-Location frontend
 npm install
 npm run dev
 ```
 
-The Vite development server runs at <http://localhost:3000> and proxies API
-requests to the backend at `http://localhost:8000`.
+The API is available at `http://localhost:8000`; interactive API documentation
+is at `http://localhost:8000/docs`. Vite prints the frontend URL when it starts.
+Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
+
+## API
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | API readiness response. |
+| `GET` | `/health` | Backend health check. |
+| `POST` | `/api/prompt` | Submit a prompt; repeated prompts can return a cache hit. |
+| `POST` | `/api/jobs` | Submit a prompt for asynchronous processing. |
+| `GET` | `/api/jobs` | List recent jobs, newest first; optional `limit` from 1 to 100. |
+| `GET` | `/api/jobs/{job_id}` | Read the status and result of a submitted job. |
+| `POST` | `/api/pdf/today` | Extract PDF text and find date-matching content. |
+| `GET` | `/api/grid/config` | Read grid configuration. |
+| `GET` | `/api/grid/health` | Read grid health and cached-entry totals. |
+| `GET` | `/api/grid/stats` | Read cache totals, hit rate, and per-node statistics. |
+| `POST` | `/api/grid/clear` | Clear cached entries and reset cache metrics. |
+
+Use `/docs` for the live request and response schemas.
+
+## Tests
+
+Run the full backend suite from the repository root:
+
+```powershell
+python -m pytest tests/ -v
+```
+
+## Documentation
+
+- [Project report](docs/PROJECT_REPORT.md) · [Final report PDF](docs/Internship_Report_Final.pdf)
+- [Demo guide](docs/DEMO_GUIDE.md) · [v1.0 release notes](docs/RELEASE_v1.0.md)
+- [Daily work sheets](docs/daily/)
+
+## Status
+
+**v1.0 complete — Day 20 final release.** Start the backend with
+`uvicorn app.main:app --reload`, then start the frontend with `cd frontend` and
+`npm run dev`. See the [demo guide](docs/DEMO_GUIDE.md) for the cache miss-to-hit
+flow and PDF upload example.
+ main

@@ -118,6 +118,24 @@ def test_pdf_search_finds_cached_text_case_insensitively():
     }
 
 
+def test_pdf_search_snippet_centers_on_match():
+    key = f"pdf:day21-search:{uuid4()}"
+    query = f"rare-target-{uuid4()}"
+    text = f"{'before ' * 40}{query}{' after' * 40}"
+    main.grid.set(key, text)
+
+    response = client.get("/api/pdf/search", params={"q": query.upper()})
+
+    assert response.status_code == 200
+    result = next(
+        result
+        for result in response.json()["results"]
+        if result["key"] == key
+    )
+    assert query in result["snippet"]
+    assert len(result["snippet"]) <= 200 + len(query)
+
+
 def test_pdf_search_empty_query():
     response = client.get("/api/pdf/search", params={"q": " "})
 

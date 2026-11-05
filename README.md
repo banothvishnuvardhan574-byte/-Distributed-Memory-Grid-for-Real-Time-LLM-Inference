@@ -42,7 +42,13 @@ Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 | `GET` | `/` | API readiness response. |
 | `GET` | `/health` | Backend health check. |
 | `POST` | `/api/prompt` | Submit a prompt; repeated prompts can return a cache hit. |
+| `POST` | `/api/prompts/batch` | Run up to 20 prompts and return each inference result. |
+| `GET` | `/api/prompts/recent` | Read the latest 50 prompt results. |
+| `POST` | `/api/jobs` | Submit a prompt for asynchronous inference. |
+| `GET` | `/api/jobs/{job_id}` | Read an asynchronous job's status and result. |
 | `POST` | `/api/pdf/today` | Extract PDF text and find date-matching content. |
+| `GET` | `/api/pdf/search` | Search text from cached PDFs. |
+| `GET` | `/api/metrics` | Read request counts, cache hits/misses, and job totals. |
 | `GET` | `/api/grid/config` | Read grid configuration. |
 | `GET` | `/api/grid/health` | Read grid health and cached-entry totals. |
 | `GET` | `/api/grid/stats` | Read cache totals, hit rate, and per-node statistics. |

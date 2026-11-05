@@ -78,6 +78,10 @@ class PromptRequest(BaseModel):
     prompt: str = Field(..., max_length=4000)
 
 
+class BatchPromptRequest(BaseModel):
+    prompts: list[str] = Field(..., min_length=1, max_length=20)
+
+
 # Response model
 class PromptResponse(BaseModel):
     request_id: str
@@ -417,6 +421,26 @@ def metrics():
         "cache": cache,
         "jobs": {"total": job_total},
     }
+
+
+@app.post("/api/prompts/batch")
+def submit_batch(request: BatchPromptRequest):
+    results = []
+    for raw_prompt in request.prompts:
+        prompt = raw_prompt.strip()
+        if not prompt:
+            continue
+
+        try:
+            results.append(run_prompt(prompt, str(uuid4())))
+        except Exception as exc:
+            logger.exception("Batch prompt processing failed")
+            raise HTTPException(
+                status_code=500,
+                detail="Prompt processing failed",
+            ) from exc
+
+    return {"count": len(results), "results": results}
 
 
 def _run_job(job_id: str, prompt: str) -> None:

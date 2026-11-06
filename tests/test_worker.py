@@ -17,15 +17,17 @@ from inference.exceptions import (
 )
 
 
-def successful_inference(prompt: str) -> str:
+# Mock inference functions
+
+def mocked_successful_inference(prompt: str) -> str:
     return "Hello back!"
 
 
-def echo_inference(prompt: str) -> str:
+def mocked_echo_inference(prompt: str) -> str:
     return f"You said: {prompt}"
 
 
-def failing_inference(prompt: str) -> str:
+def mocked_failing_inference(prompt: str) -> str:
     raise RuntimeError("Model is unavailable")
 
 
@@ -50,6 +52,16 @@ def inference_error(prompt: str) -> str:
     raise InferenceError("Internal inference error")
 
 
+def echo_inference(prompt: str) -> str:
+    return f"You said: {prompt}"
+
+
+def successful_inference(prompt: str) -> str:
+    return "Hello back!"
+
+
+# Worker cleanup fixture
+
 @pytest.fixture(autouse=True)
 def cleanup_worker():
     """Ensure each test releases its worker process."""
@@ -57,11 +69,13 @@ def cleanup_worker():
     worker_module.shutdown_worker()
 
 
+# Success tests
+
 def test_worker_module_success_when_available():
     result = process_prompt(
         request_id="123",
         prompt="Hello",
-        inference_fn=successful_inference,
+        inference_fn=mocked_successful_inference,
         timeout_seconds=20,
     )
 
@@ -73,26 +87,11 @@ def test_worker_module_success_when_available():
     assert result["latency_ms"] >= 0
 
 
-def test_worker_module_failure_when_available():
-    result = process_prompt(
-        request_id="999",
-        prompt="Hello",
-        inference_fn=failing_inference,
-        timeout_seconds=20,
-    )
-
-    assert result["request_id"] == "999"
-    assert result["status"] == "failed"
-    assert result["response"] is None
-    assert result["error"] == "Failed to process prompt"
-    assert isinstance(result["latency_ms"], int)
-
-
-def test_process_prompt_removes_extra_spaces():
+def test_mocked_process_prompt_removes_extra_spaces():
     result = process_prompt(
         request_id="456",
         prompt="  Hello  ",
-        inference_fn=echo_inference,
+        inference_fn=mocked_echo_inference,
         timeout_seconds=20,
     )
 
@@ -100,20 +99,13 @@ def test_process_prompt_removes_extra_spaces():
     assert result["status"] == "completed"
 
 
-def test_process_prompt_rejects_empty_prompt():
-    with pytest.raises(ValueError, match="Prompt cannot be empty"):
-        process_prompt(
-            request_id="789",
-            prompt="   ",
-            inference_fn=successful_inference,
-        )
+# Failure tests
 
-
-def test_process_prompt_handles_inference_error():
+def test_mocked_worker_failure():
     result = process_prompt(
         request_id="999",
         prompt="Hello",
-        inference_fn=failing_inference,
+        inference_fn=mocked_failing_inference,
         timeout_seconds=20,
     )
 
@@ -124,58 +116,40 @@ def test_process_prompt_handles_inference_error():
     assert isinstance(result["latency_ms"], int)
 
 
-def test_process_prompt_handles_timeout():
+def test_process_prompt_rejects_empty_prompt():
+    with pytest.raises(ValueError, match="Prompt cannot be empty"):
+        process_prompt(
+            request_id="789",
+            prompt="   ",
+            inference_fn=mocked_successful_inference,
+        )
+
+
+def test_process_prompt_handles_inference_error():
     result = process_prompt(
-        request_id="timeout-001",
+        request_id="999",
         prompt="Hello",
-        inference_fn=slow_inference,
-        timeout_seconds=0.1,
+        inference_fn=mocked_failing_inference,
+        timeout_seconds=20,
     )
 
-    assert result["request_id"] == "timeout-001"
+    assert result["request_id"] == "999"
     assert result["status"] == "failed"
     assert result["response"] is None
-    assert result["error"] == "Inference timed out"
+    assert result["error"] == "Failed to process prompt"
     assert isinstance(result["latency_ms"], int)
 
-    # A timed-out worker must be removed.
-    assert worker_module._worker_process is None
 
+# Timeout tests
 
 def test_process_prompt_rejects_invalid_timeout():
     with pytest.raises(ValueError, match="Timeout must be greater than zero"):
         process_prompt(
             request_id="timeout-002",
             prompt="Hello",
-            inference_fn=successful_inference,
+            inference_fn=mocked_successful_inference,
             timeout_seconds=0,
         )
-
-
-def test_worker_process_is_reused_between_requests():
-    first_result = process_prompt(
-        request_id="persistent-001",
-        prompt="First request",
-        inference_fn=echo_inference,
-        timeout_seconds=20,
-    )
-
-    first_process_id = worker_module._worker_process.pid
-
-    second_result = process_prompt(
-        request_id="persistent-002",
-        prompt="Second request",
-        inference_fn=echo_inference,
-        timeout_seconds=20,
-    )
-
-    second_process_id = worker_module._worker_process.pid
-
-    assert first_result["status"] == "completed"
-    assert second_result["status"] == "completed"
-    assert first_result["request_id"] == "persistent-001"
-    assert second_result["request_id"] == "persistent-002"
-    assert first_process_id == second_process_id
 
 
 def test_worker_restarts_after_timeout():
@@ -201,6 +175,38 @@ def test_worker_restarts_after_timeout():
     assert retry_result["status"] == "completed"
     assert retry_result["response"] == "Hello back!"
 
+
+# Worker process persistence test
+
+def test_worker_process_is_reused_between_requests():
+    first_result = process_prompt(
+        request_id="persistent-001",
+        prompt="First request",
+        inference_fn=echo_inference,
+        timeout_seconds=20,
+    )
+
+    first_process_id = worker_module._worker_process.pid
+
+    second_result = process_prompt(
+        request_id="persistent-002",
+        prompt="Second request",
+        inference_fn=echo_inference,
+        timeout_seconds=20,
+    )
+
+    second_process_id = worker_module._worker_process.pid
+
+    assert first_result["status"] == "completed"
+    assert second_result["status"] == "completed"
+
+    assert first_result["request_id"] == "persistent-001"
+    assert second_result["request_id"] == "persistent-002"
+
+    assert first_process_id == second_process_id
+
+
+# Typed inference error tests
 
 @pytest.mark.parametrize(
     ("inference_fn", "expected_error"),

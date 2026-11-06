@@ -7,7 +7,7 @@ def day10_test_inference(prompt: str) -> str:
     return f"Worker processed: {prompt}"
 
 
-def test_post_prompt_roundtrips_request_id_through_worker(monkeypatch):
+def test_mocked_post_prompt_roundtrips_request_id_through_worker(monkeypatch):
     expected_request_id = "day10-request-roundtrip"
     prompt = "test worker roundtrip"
 
@@ -34,7 +34,7 @@ def test_post_prompt_roundtrips_request_id_through_worker(monkeypatch):
     finally:
         main.grid_clear()
 
-def test_post_prompt_returns_500_when_worker_fails(monkeypatch):
+def test_mocked_post_prompt_returns_500_when_worker_fails(monkeypatch):
     def failing_process_prompt(request_id, prompt, inference_fn):
         return {
             "request_id": request_id,
@@ -63,4 +63,3 @@ def test_post_prompt_returns_500_when_worker_fails(monkeypatch):
         }
     finally:
         main.grid_clear()
-

@@ -35,6 +35,8 @@ The processing flow is:
 
 Requests are serialised using a thread lock because one worker process handles one inference request at a time.
 
+The worker starts lazily when the first prompt is submitted. When the adapter inference function is used, the child process obtains the inference adapter singleton before announcing that it is ready.
+
 ## 3. Worker Request Contract
 
 The public worker entry point is:
@@ -61,7 +63,7 @@ Request fields:
 - `request_id`: Identifies the original request.
 - `prompt`: Contains the user's input text.
 - `inference_fn`: The callable used to perform inference.
-- `timeout_seconds`: The maximum allowed inference wait time.
+- `timeout_seconds`: The maximum allowed inference wait time after worker startup.
 
 ## 4. Worker Response Contract
 
@@ -97,7 +99,7 @@ Response fields:
 - `error`: Contains `null` on success or an error description on failure.
 - `latency_ms`: Records the worker-side processing time in milliseconds.
 
-The worker response contract is separate from the existing FastAPI response model. The FastAPI `PromptResponse` model currently does not expose `latency_ms`.
+The FastAPI `PromptResponse` model exposes `latency_ms`. The API uses the worker's latency value when one is returned; the response model defaults the field to `0` when the result does not include it (for example, a cache hit).
 
 ## 5. Persistent Process Management
 
@@ -118,9 +120,7 @@ The worker uses:
 - `multiprocessing.Pipe`
 - `threading.Lock`
 
-The worker initialisation readiness timeout is 120 seconds. This allows time for inference environment initialisation.
-
-The normal inference timeout defaults to 15 seconds.
+The worker initialisation readiness timeout is 120 seconds. This allows time for inference environment initialisation. The normal inference timeout defaults to 15 seconds and begins after the worker reports that it is ready.
 
 ### Timeout recovery
 
@@ -145,7 +145,7 @@ This function attempts graceful shutdown and then terminates the process if nece
 
 An `atexit` handler also registers worker cleanup when the parent Python process exits.
 
-Explicit FastAPI startup and shutdown lifecycle integration remains a follow-up task.
+The FastAPI application now uses the lifespan mechanism in `app/main.py`. Its `finally` block calls `shutdown_worker()` when the application shuts down, connecting worker cleanup to the API lifecycle.
 
 ## 6. Inference Adapter Integration
 
@@ -170,13 +170,11 @@ The adapter provides:
 - `InferenceTimeoutError`
 - `InferenceError`
 
-When `adapter_inference` is supplied, the worker obtains the adapter singleton during child-process initialisation.
+When `adapter_inference` is supplied, the worker obtains the adapter singleton during child-process initialisation. The adapter is intended to retain its model instance within the persistent process, avoiding normal per-request model reloads.
 
-The adapter is intended to retain its model instance within the persistent process, avoiding normal per-request model reloads.
+In `app/main.py`, the name `stub_inference` is retained as a compatibility hook for existing tests, but it is assigned to `adapter_inference`. The prompt-processing path therefore delegates to the public inference adapter; it is not the old echo-stub implementation.
 
-**Important:** Obtaining the adapter singleton does not guarantee that model weights are loaded. A valid model path and the required runtime must be available.
-
-The current FastAPI application still supplies its local `stub_inference` function. Therefore, real API-to-model inference integration has not yet been completed.
+**Runtime limitation:** Connecting the adapter in code does not by itself prove that genuine model generation is available. The verified local environment used for this PR did not have `llama-cpp-python` installed and did not have `LLM_MODEL_PATH` configured. Genuine model output therefore remains to be demonstrated after the agreed runtime and model file are installed and configured. Model weights and other large model artifacts must not be committed to Git.
 
 ## 7. Error Handling
 
@@ -219,8 +217,11 @@ Implemented capabilities:
 - Typed inference exception handling.
 - Processing latency measurement.
 - Explicit worker shutdown function.
+- FastAPI lifespan shutdown integration.
+- FastAPI connection to the public inference adapter.
+- API response field for `latency_ms`.
 
-The FastAPI application continues to use its local stub inference function. Real LLM inference through the API remains pending team integration and model availability.
+The code path is connected to the inference adapter, but genuine model generation is not yet verified because the local runtime and model path were not configured during the recorded test run.
 
 ## 10. Testing
 
@@ -232,9 +233,7 @@ Command:
 python -m pytest tests/test_worker.py -v
 ```
 
-**Latest recorded result: 13 passed.**
-
-Coverage includes:
+Worker test coverage includes:
 
 - Successful inference.
 - Inference failure.
@@ -246,16 +245,6 @@ Coverage includes:
 - Worker restart after timeout.
 - Typed inference exception handling.
 
-### API worker tests
-
-Command:
-
-```powershell
-python -m pytest tests/test_api_worker.py -v
-```
-
-**Latest recorded result: 2 passed, 2 warnings.**
-
 ### Complete project test suite
 
 Command:
@@ -264,9 +253,17 @@ Command:
 python -m pytest -q
 ```
 
-**Latest recorded result: 115 passed, 2 warnings in 10.20 seconds.**
+**Latest local result reported for this branch: 117 passed in 23.21 seconds.**
 
-These results were recorded after the persistent worker implementation.
+Python syntax was also checked with:
+
+```powershell
+python -m py_compile app\main.py
+```
+
+The command completed with no output, indicating no syntax error in `app/main.py`.
+
+These automated tests use fake inference for deterministic test coverage. They do not replace a real-model end-to-end inference demonstration.
 
 ## 11. Git Record
 
@@ -280,16 +277,15 @@ These results were recorded after the persistent worker implementation.
 
 `feat(worker): add persistent inference process`
 
-The implementation and worker tests were committed in this commit.
+The implementation and worker tests are included in the branch history. The worker and API integration changes are submitted for review in Pull Request #81.
 
 ## 12. Remaining Work
 
-1. Coordinate real inference integration with Suraj and Vishnu.
-2. Connect the approved inference adapter to the API through the agreed integration point.
-3. Add explicit FastAPI startup and shutdown worker lifecycle integration with Vishnu's approval.
-4. Verify real inference using an available model.
-5. Confirm the final API response contract, including whether `latency_ms` should be exposed.
-6. Run full regression and integration tests.
-7. Submit the documentation and implementation for team review.
+1. Coordinate the real inference setup with Suraj and Vishnu.
+2. Install the team-approved inference runtime and configure a valid local model path without committing model weights.
+3. Run genuine prompt generation through the API and verify the API → worker → inference adapter → API response flow.
+4. Confirm the agreed response contract and latency behaviour during real inference.
+5. Run the full regression suite after runtime integration.
+6. Complete team review of Pull Request #81.
 
-**Scope limitation:** Remote gRPC communication and advanced distributed worker execution are not claimed as completed by this local persistent-worker implementation.
+**Scope limitation:** Remote gRPC communication, multi-machine execution, and advanced distributed inference are not claimed as completed by this local persistent-worker implementation.

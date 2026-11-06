@@ -61,7 +61,11 @@ def test_mocked_prompt_endpoint_returns_expected_response_fields(monkeypatch):
             "response",
             "cache",
             "error",
+            "latency_ms",
+
         }
+        assert isinstance(payload["latency_ms"], int)
+        assert payload["latency_ms"] >= 0
         assert payload["request_id"] == expected_request_id
         assert payload["status"] == "completed"
         assert payload["prompt"] == prompt

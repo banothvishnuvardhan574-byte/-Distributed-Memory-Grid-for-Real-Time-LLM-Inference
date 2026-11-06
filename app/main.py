@@ -2,18 +2,35 @@
 import io
 import logging
 import re
+import threading
 import time
+from collections import deque
 from calendar import month_abbr, month_name
 from datetime import date
+from typing import Any
 from uuid import uuid4
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
-from worker.worker import process_prompt
+from worker.worker import (
+    adapter_inference,
+    process_prompt,
+    shutdown_worker,
+)
 
 try:
     from pypdf import PdfReader
@@ -28,10 +45,27 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("memgrid")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(
+        "MemoryGrid started: nodes=%s, ttl=%ss, capacity_per_node=%s",
+        settings.node_count,
+        settings.default_ttl_seconds,
+        settings.cache_size_per_node,
+    )
+
+    try:
+        yield
+    finally:
+        shutdown_worker()
+        logger.info("Inference worker shut down")
+
+
 app = FastAPI(
     title=settings.app_name,
     description="Backend API for real-time LLM inference",
     version=settings.version,
+    lifespan=lifespan,
 )
 
 
@@ -77,7 +111,7 @@ class PromptResponse(BaseModel):
     response: str | None
     cache: str
     error: str | None = None
-
+    latency_ms: int = 0
 
 # --------------------------------------------------
 # Memory grid and metrics
@@ -93,25 +127,20 @@ cache_metrics = {
     "misses": 0,
 }
 
+jobs: dict[str, dict[str, Any]] = {}
+jobs_lock = threading.Lock()
+recent_prompts: deque[dict[str, str]] = deque(maxlen=50)
+recent_prompts_lock = threading.Lock()
 
-@app.on_event("startup")
-def startup():
-    logger.info(
-        "MemoryGrid started: nodes=%s, ttl=%ss, capacity_per_node=%s",
-        settings.node_count,
-        settings.default_ttl_seconds,
-        settings.cache_size_per_node,
-    )
 
 
 # --------------------------------------------------
 # Prompt processing
 # --------------------------------------------------
 
-def stub_inference(prompt: str) -> str:
-    """Fallback inference function used by the worker."""
-    return f"[stub] echo: {prompt[:200]}"
-
+# Keep this name as a compatibility hook for existing tests.
+# Production inference delegates to Suraj's real adapter.
+stub_inference = adapter_inference
 
 def run_prompt(prompt: str, request_id: str) -> dict:
     """Return a cached response or invoke the worker."""
@@ -347,6 +376,16 @@ def submit_prompt(request: PromptRequest):
             detail="Prompt processing failed",
         ) from exc
 
+    with recent_prompts_lock:
+        recent_prompts.appendleft(
+            {
+                "request_id": request_id,
+                "prompt": prompt,
+                "status": result.get("status", "failed"),
+                "cache": result.get("cache", "miss"),
+            }
+        )
+
     if result.get("status") != "completed":
         raise HTTPException(
             status_code=500,
@@ -360,7 +399,91 @@ def submit_prompt(request: PromptRequest):
         response=result.get("response"),
         cache=result.get("cache", "miss"),
         error=result.get("error"),
-    )
+        latency_ms=result.get("latency_ms", 0),
+     )
+
+
+@app.get("/api/prompts/recent")
+def prompts_recent():
+    with recent_prompts_lock:
+        prompts = list(recent_prompts)
+    return {"count": len(prompts), "prompts": prompts}
+
+
+def _run_job(job_id: str, prompt: str) -> None:
+    try:
+        result = run_prompt(prompt, job_id)
+    except Exception:
+        logger.exception("Async prompt job %s failed", job_id)
+        result = {
+            "request_id": job_id,
+            "status": "failed",
+            "response": None,
+            "error": "Prompt processing failed",
+        }
+
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": result.get("status", "failed"),
+            "result": result,
+        }
+
+
+@app.post("/api/jobs", status_code=202)
+def submit_job(request: PromptRequest):
+    prompt = request.prompt.strip()
+    if not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="Prompt cannot be empty",
+        )
+
+    job_id = str(uuid4())
+    with jobs_lock:
+        jobs[job_id] = {"status": "running", "result": None}
+
+    try:
+        threading.Thread(
+            target=_run_job,
+            args=(job_id, prompt),
+            daemon=True,
+        ).start()
+    except RuntimeError as exc:
+        with jobs_lock:
+            jobs.pop(job_id, None)
+        logger.exception("Unable to start async prompt job %s", job_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start prompt job",
+        ) from exc
+
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/api/jobs")
+def list_jobs(limit: int = Query(default=20, ge=1, le=100)):
+    with jobs_lock:
+        recent_jobs = list(jobs.items())[::-1][:limit]
+
+    return {
+        "count": len(recent_jobs),
+        "jobs": [
+            {"job_id": job_id, "status": job["status"]}
+            for job_id, job in recent_jobs
+        ],
+    }
+
+
+@app.get("/api/jobs/{job_id}")
+def job_status(job_id: str):
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Job not found",
+            )
+        return {"job_id": job_id, **job}
 
 
 # --------------------------------------------------
@@ -477,4 +600,44 @@ async def extract_today_pdf_matches(
             "Small PDF check complete. "
             "Only the requested date has been extracted."
         ),
+    }
+
+
+@app.get("/api/pdf/search")
+def pdf_search(q: str):
+    query = q.strip()
+    if not query:
+        raise HTTPException(
+            status_code=400,
+            detail="Query cannot be empty",
+        )
+
+    results = []
+    for node in grid.nodes:
+        for key in list(node.store):
+            if not key.startswith("pdf:"):
+                continue
+
+            text = node.get(key)
+            if text is None:
+                continue
+
+            match_index = text.casefold().find(query.casefold())
+            if match_index >= 0:
+                snippet_start = max(0, match_index - 80)
+                snippet_end = min(
+                    len(text),
+                    max(match_index + len(query) + 120, snippet_start + 200),
+                )
+                results.append(
+                    {
+                        "key": key,
+                        "snippet": text[snippet_start:snippet_end],
+                    }
+                )
+
+    return {
+        "query": query,
+        "matches": len(results),
+        "results": results,
     }

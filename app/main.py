@@ -9,6 +9,7 @@ from calendar import month_abbr, month_name
 from datetime import date
 from typing import Any
 from uuid import uuid4
+from contextlib import asynccontextmanager
 
 from fastapi import (
     FastAPI,
@@ -25,7 +26,11 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
-from worker.worker import process_prompt
+from worker.worker import (
+    adapter_inference,
+    process_prompt,
+    shutdown_worker,
+)
 
 try:
     from pypdf import PdfReader
@@ -40,10 +45,27 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("memgrid")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(
+        "MemoryGrid started: nodes=%s, ttl=%ss, capacity_per_node=%s",
+        settings.node_count,
+        settings.default_ttl_seconds,
+        settings.cache_size_per_node,
+    )
+
+    try:
+        yield
+    finally:
+        shutdown_worker()
+        logger.info("Inference worker shut down")
+
+
 app = FastAPI(
     title=settings.app_name,
     description="Backend API for real-time LLM inference",
     version=settings.version,
+    lifespan=lifespan,
 )
 
 
@@ -89,7 +111,7 @@ class PromptResponse(BaseModel):
     response: str | None
     cache: str
     error: str | None = None
-
+    latency_ms: int = 0
 
 # --------------------------------------------------
 # Memory grid and metrics
@@ -111,24 +133,14 @@ recent_prompts: deque[dict[str, str]] = deque(maxlen=50)
 recent_prompts_lock = threading.Lock()
 
 
-@app.on_event("startup")
-def startup():
-    logger.info(
-        "MemoryGrid started: nodes=%s, ttl=%ss, capacity_per_node=%s",
-        settings.node_count,
-        settings.default_ttl_seconds,
-        settings.cache_size_per_node,
-    )
-
 
 # --------------------------------------------------
 # Prompt processing
 # --------------------------------------------------
 
-def stub_inference(prompt: str) -> str:
-    """Fallback inference function used by the worker."""
-    return f"[stub] echo: {prompt[:200]}"
-
+# Keep this name as a compatibility hook for existing tests.
+# Production inference delegates to Suraj's real adapter.
+stub_inference = adapter_inference
 
 def run_prompt(prompt: str, request_id: str) -> dict:
     """Return a cached response or invoke the worker."""
@@ -387,7 +399,8 @@ def submit_prompt(request: PromptRequest):
         response=result.get("response"),
         cache=result.get("cache", "miss"),
         error=result.get("error"),
-    )
+        latency_ms=result.get("latency_ms", 0),
+     )
 
 
 @app.get("/api/prompts/recent")

@@ -15,6 +15,7 @@ from fastapi import (
     FastAPI,
     File,
     Form,
+    Header,
     HTTPException,
     Query,
     Request,
@@ -131,6 +132,40 @@ jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = threading.Lock()
 recent_prompts: deque[dict[str, str]] = deque(maxlen=50)
 recent_prompts_lock = threading.Lock()
+API_KEYS = {
+    key.strip()
+    for key in settings.api_keys.split(",")
+    if key.strip()
+}
+rate_log: dict[str, list[float]] = {}
+rate_log_lock = threading.Lock()
+RATE_LIMIT = 30
+RATE_WINDOW = 60
+
+
+def check_auth(x_api_key: str | None) -> None:
+    if x_api_key not in API_KEYS:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key",
+        )
+
+    now = time.monotonic()
+    with rate_log_lock:
+        hits = [
+            timestamp
+            for timestamp in rate_log.get(x_api_key, [])
+            if now - timestamp < RATE_WINDOW
+        ]
+        if len(hits) >= RATE_LIMIT:
+            rate_log[x_api_key] = hits
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded",
+            )
+
+        hits.append(now)
+        rate_log[x_api_key] = hits
 
 
 
@@ -357,7 +392,11 @@ def health_check_route():
 # --------------------------------------------------
 
 @app.post("/api/prompt", response_model=PromptResponse)
-def submit_prompt(request: PromptRequest):
+def submit_prompt(
+    request: PromptRequest,
+    x_api_key: str | None = Header(default=None),
+):
+    check_auth(x_api_key)
     prompt = request.prompt.strip()
 
     if not prompt:
@@ -461,9 +500,16 @@ def submit_job(request: PromptRequest):
 
 
 @app.get("/api/jobs")
-def list_jobs(limit: int = Query(default=20, ge=1, le=100)):
+def list_jobs(
+    limit: int = Query(default=20, ge=1, le=100),
+    status: str | None = None,
+):
     with jobs_lock:
-        recent_jobs = list(jobs.items())[::-1][:limit]
+        recent_jobs = [
+            (job_id, job)
+            for job_id, job in reversed(list(jobs.items()))
+            if status is None or job.get("status") == status
+        ][:limit]
 
     return {
         "count": len(recent_jobs),
@@ -472,6 +518,20 @@ def list_jobs(limit: int = Query(default=20, ge=1, le=100)):
             for job_id, job in recent_jobs
         ],
     }
+
+
+@app.delete("/api/jobs")
+def clear_finished_jobs():
+    with jobs_lock:
+        finished_job_ids = [
+            job_id
+            for job_id, job in jobs.items()
+            if job.get("status") != "running"
+        ]
+        for job_id in finished_job_ids:
+            del jobs[job_id]
+
+    return {"removed": len(finished_job_ids)}
 
 
 @app.get("/api/jobs/{job_id}")

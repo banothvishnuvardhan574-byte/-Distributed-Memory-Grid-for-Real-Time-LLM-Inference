@@ -23,7 +23,10 @@ def test_recent_prompts_lists_prompt_with_cache_status(monkeypatch):
         main.recent_prompts.clear()
 
     try:
-        with TestClient(main.app) as client:
+        with TestClient(
+            main.app,
+            headers={"X-API-Key": "test-api-key"},
+        ) as client:
             response = client.post(
                 "/api/prompt",
                 json={"prompt": prompt},
@@ -49,6 +52,7 @@ def test_recent_prompts_lists_prompt_with_cache_status(monkeypatch):
 
 
 def test_recent_prompts_keeps_only_latest_50(monkeypatch):
+    monkeypatch.setattr(main, "RATE_LIMIT", 60)
     request_ids = iter(f"history-request-{index}" for index in range(51))
     monkeypatch.setattr(main, "uuid4", lambda: next(request_ids))
     monkeypatch.setattr(
@@ -66,7 +70,10 @@ def test_recent_prompts_keeps_only_latest_50(monkeypatch):
         main.recent_prompts.clear()
 
     try:
-        with TestClient(main.app) as client:
+        with TestClient(
+            main.app,
+            headers={"X-API-Key": "test-api-key"},
+        ) as client:
             for index in range(51):
                 response = client.post(
                     "/api/prompt",

@@ -125,7 +125,8 @@ Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 | `GET` | `/health` | Backend health check. |
 | `POST` | `/api/prompt` | Submit a prompt; repeated prompts can return a cache hit. |
 | `POST` | `/api/jobs` | Submit a prompt for asynchronous processing. |
-| `GET` | `/api/jobs` | List recent jobs, newest first; optional `limit` from 1 to 100. |
+| `GET` | `/api/jobs` | List recent jobs, newest first; optional `status` and `limit` (1–100). |
+| `DELETE` | `/api/jobs` | Remove finished jobs while preserving jobs still running. |
 | `GET` | `/api/jobs/{job_id}` | Read the status and result of a submitted job. |
 | `POST` | `/api/pdf/today` | Extract PDF text and find date-matching content. |
 | `GET` | `/api/grid/config` | Read grid configuration. |
@@ -134,6 +135,18 @@ Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 | `POST` | `/api/grid/clear` | Clear cached entries and reset cache metrics. |
 
 Use `/docs` for the live request and response schemas.
+
+`POST /api/prompt` requires an `X-API-Key` header and allows 30 requests per
+key per 60 seconds per API process. Configure accepted keys as a comma-separated
+`API_KEYS` value in the backend environment (for example, in `.env`):
+
+```dotenv
+API_KEYS=replace-with-a-long-random-key
+```
+
+Enter an accepted key in the prompt form. Do not commit API keys to source
+control. The in-memory rate limit is process-local and resets when the API
+restarts.
 
 ## Tests
 

@@ -8,14 +8,20 @@ def day11_test_inference(prompt: str) -> str:
 
 
 def test_prompt_endpoint_rejects_missing_prompt():
-    with TestClient(main.app) as client:
+    with TestClient(
+        main.app,
+        headers={"X-API-Key": "test-api-key"},
+    ) as client:
         response = client.post("/api/prompt", json={})
 
     assert response.status_code == 422
 
 
 def test_prompt_endpoint_rejects_malformed_json():
-    with TestClient(main.app) as client:
+    with TestClient(
+        main.app,
+        headers={"X-API-Key": "test-api-key"},
+    ) as client:
         response = client.post(
             "/api/prompt",
             content='{"prompt":',
@@ -26,7 +32,10 @@ def test_prompt_endpoint_rejects_malformed_json():
 
 
 def test_prompt_endpoint_rejects_blank_prompt():
-    with TestClient(main.app) as client:
+    with TestClient(
+        main.app,
+        headers={"X-API-Key": "test-api-key"},
+    ) as client:
         response = client.post(
             "/api/prompt",
             json={"prompt": "   "},
@@ -45,7 +54,10 @@ def test_mocked_prompt_endpoint_returns_expected_response_fields(monkeypatch):
 
     main.grid_clear()
     try:
-        with TestClient(main.app) as client:
+        with TestClient(
+            main.app,
+            headers={"X-API-Key": "test-api-key"},
+        ) as client:
             response = client.post(
                 "/api/prompt",
                 json={"prompt": prompt},

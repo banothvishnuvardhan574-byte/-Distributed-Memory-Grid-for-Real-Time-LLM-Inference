@@ -7,7 +7,7 @@ import app.main as main
 from app.main import app
 
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-API-Key": "test-api-key"})
 
 
 def test_home_returns_ready_status():

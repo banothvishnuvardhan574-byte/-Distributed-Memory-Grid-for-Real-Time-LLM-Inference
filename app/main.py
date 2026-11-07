@@ -15,6 +15,7 @@ from fastapi import (
     FastAPI,
     File,
     Form,
+    Header,
     HTTPException,
     Query,
     Request,
@@ -131,6 +132,40 @@ jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = threading.Lock()
 recent_prompts: deque[dict[str, str]] = deque(maxlen=50)
 recent_prompts_lock = threading.Lock()
+API_KEYS = {
+    key.strip()
+    for key in settings.api_keys.split(",")
+    if key.strip()
+}
+rate_log: dict[str, list[float]] = {}
+rate_log_lock = threading.Lock()
+RATE_LIMIT = 30
+RATE_WINDOW = 60
+
+
+def check_auth(x_api_key: str | None) -> None:
+    if x_api_key not in API_KEYS:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key",
+        )
+
+    now = time.monotonic()
+    with rate_log_lock:
+        hits = [
+            timestamp
+            for timestamp in rate_log.get(x_api_key, [])
+            if now - timestamp < RATE_WINDOW
+        ]
+        if len(hits) >= RATE_LIMIT:
+            rate_log[x_api_key] = hits
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded",
+            )
+
+        hits.append(now)
+        rate_log[x_api_key] = hits
 
 
 
@@ -357,7 +392,11 @@ def health_check_route():
 # --------------------------------------------------
 
 @app.post("/api/prompt", response_model=PromptResponse)
-def submit_prompt(request: PromptRequest):
+def submit_prompt(
+    request: PromptRequest,
+    x_api_key: str | None = Header(default=None),
+):
+    check_auth(x_api_key)
     prompt = request.prompt.strip()
 
     if not prompt:

@@ -135,6 +135,18 @@ Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 
 Use `/docs` for the live request and response schemas.
 
+`POST /api/prompt` requires an `X-API-Key` header and allows 30 requests per
+key per 60 seconds per API process. Configure accepted keys as a comma-separated
+`API_KEYS` value in the backend environment (for example, in `.env`):
+
+```dotenv
+API_KEYS=replace-with-a-long-random-key
+```
+
+Enter an accepted key in the prompt form. Do not commit API keys to source
+control. The in-memory rate limit is process-local and resets when the API
+restarts.
+
 ## Tests
 
 Run the full backend suite from the repository root:

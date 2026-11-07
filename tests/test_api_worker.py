@@ -16,7 +16,10 @@ def test_mocked_post_prompt_roundtrips_request_id_through_worker(monkeypatch):
 
     main.grid_clear()
     try:
-        with TestClient(main.app) as client:
+        with TestClient(
+            main.app,
+            headers={"X-API-Key": "test-api-key"},
+        ) as client:
             response = client.post(
                 "/api/prompt",
                 json={"prompt": prompt},
@@ -51,7 +54,10 @@ def test_mocked_post_prompt_returns_500_when_worker_fails(monkeypatch):
 
     main.grid_clear()
     try:
-        with TestClient(main.app) as client:
+        with TestClient(
+            main.app,
+            headers={"X-API-Key": "test-api-key"},
+        ) as client:
             response = client.post(
                 "/api/prompt",
                 json={"prompt": "test worker failure"},

@@ -500,9 +500,16 @@ def submit_job(request: PromptRequest):
 
 
 @app.get("/api/jobs")
-def list_jobs(limit: int = Query(default=20, ge=1, le=100)):
+def list_jobs(
+    limit: int = Query(default=20, ge=1, le=100),
+    status: str | None = None,
+):
     with jobs_lock:
-        recent_jobs = list(jobs.items())[::-1][:limit]
+        recent_jobs = [
+            (job_id, job)
+            for job_id, job in reversed(list(jobs.items()))
+            if status is None or job.get("status") == status
+        ][:limit]
 
     return {
         "count": len(recent_jobs),
@@ -511,6 +518,20 @@ def list_jobs(limit: int = Query(default=20, ge=1, le=100)):
             for job_id, job in recent_jobs
         ],
     }
+
+
+@app.delete("/api/jobs")
+def clear_finished_jobs():
+    with jobs_lock:
+        finished_job_ids = [
+            job_id
+            for job_id, job in jobs.items()
+            if job.get("status") != "running"
+        ]
+        for job_id in finished_job_ids:
+            del jobs[job_id]
+
+    return {"removed": len(finished_job_ids)}
 
 
 @app.get("/api/jobs/{job_id}")

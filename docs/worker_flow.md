@@ -253,7 +253,7 @@ Command:
 python -m pytest -q
 ```
 
-**Latest local result reported for this branch: 117 passed in 23.21 seconds.**
+**Earlier pre-merge result: 117 passed in 23.21 seconds. See Section 13 for the latest post-merge regression result.**
 
 Python syntax was also checked with:
 
@@ -277,15 +277,93 @@ These automated tests use fake inference for deterministic test coverage. They d
 
 `feat(worker): add persistent inference process`
 
-The implementation and worker tests are included in the branch history. The worker and API integration changes are submitted for review in Pull Request #81.
+The worker implementation and API integration were merged into `main` through Pull Request #81.
 
 ## 12. Remaining Work
 
-1. Coordinate the real inference setup with Suraj and Vishnu.
-2. Install the team-approved inference runtime and configure a valid local model path without committing model weights.
-3. Run genuine prompt generation through the API and verify the API → worker → inference adapter → API response flow.
-4. Confirm the agreed response contract and latency behaviour during real inference.
-5. Run the full regression suite after runtime integration.
-6. Complete team review of Pull Request #81.
+1. Coordinate the chat-template improvement with Suraj.
+2. Repeat the API-to-worker-to-model integration test after the adapter update.
+3. Verify that the generated response is relevant to the software prompt.
+4. Run the full regression suite after the adapter change.
+5. Record the final integration evidence.
 
 **Scope limitation:** Remote gRPC communication, multi-machine execution, and advanced distributed inference are not claimed as completed by this local persistent-worker implementation.
+
+
+## 13. Post-Merge Real-Model Verification
+
+**Verification date:** 7 November 2026
+
+After Pull Request #81 was merged into `main`, the local environment was
+updated and genuine model inference was tested.
+
+### Runtime and model setup
+
+- Installed `llama-cpp-python` version `0.3.36`.
+- Used a prebuilt Windows CPU wheel.
+- Downloaded Qwen2.5-0.5B-Instruct in GGUF Q4_K_M format.
+- Model file: `models/qwen2.5-0.5b-instruct-q4_k_m.gguf`.
+- Verified file size: approximately 468.6 MiB.
+- Verified GGUF file header.
+- Configured `LLM_MODEL_PATH` in the local PowerShell session.
+- Model weights remain local and are excluded from Git.
+
+### Model loading test
+
+Command:
+
+```powershell
+python -c "from inference import get_adapter; a=get_adapter(); print('Model loaded:', a.is_loaded); print('Model metadata:', a.model_metadata)"
+```
+
+**Observed result:**
+
+- Model loaded: `True`
+- Device: CPU
+- Threads: 2
+- Model loading time: 0.853 seconds.
+
+### Direct inference adapter test
+
+The public `generate_response()` interface successfully generated genuine model output.
+
+Observed generation time: approximately 1.62 seconds.
+
+### API-to-worker-to-model integration test
+
+The FastAPI server was started with a temporary local API key and the configured model path.
+
+A prompt was submitted to `POST /api/prompt` from a second terminal.
+
+**Observed result:**
+
+- Request ID: `7b2a0a51-3fb8-4f34-912e-4a04a887b0ce`
+- Status: `completed`
+- Cache: `miss`
+- Error: `null`
+- Worker latency: 937 ms
+- Genuine model-generated response returned through the API.
+
+The response was not semantically appropriate to the software-related question. Successful execution does not guarantee satisfactory response quality.
+
+### Chat-template comparison
+
+A separate direct test using `create_chat_completion()` with a user-role message produced a more relevant response.
+
+This suggests that using the Qwen chat template may improve instruction-following quality.
+
+The production adapter still requires review by Suraj, its owner. No production adapter change is claimed here.
+
+### Updated regression test result
+
+After updating the local branch to the latest `main`:
+
+Command:
+
+```powershell
+python -m pytest -q
+```
+
+**Latest observed result: 127 passed in 22.81 seconds.**
+
+The automated test suite and genuine model integration test were performed separately. The 127 passing tests do not represent a 127-test real-model inference run.

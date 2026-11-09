@@ -84,6 +84,10 @@ export const theme = createTheme({
           borderRadius: 10,
           padding: '10px 24px',
           transition: 'all 0.2s ease-in-out',
+          '&:focus-visible': {
+            outline: '2px solid #818cf8',
+            outlineOffset: '2px',
+          },
         },
         containedPrimary: {
           background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%)',
@@ -96,9 +100,26 @@ export const theme = createTheme({
           '&:active': {
             transform: 'translateY(0)',
           },
+          '&:focus-visible': {
+            boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.5), 0 6px 20px rgba(99, 102, 241, 0.4)',
+            outline: '2px solid #ffffff',
+            outlineOffset: '2px',
+          },
           '&.Mui-disabled': {
             background: 'rgba(255, 255, 255, 0.12)',
             color: 'rgba(255, 255, 255, 0.3)',
+          },
+        },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          transition: 'all 0.2s ease-in-out',
+          '&:focus-visible': {
+            outline: '2px solid #818cf8',
+            outlineOffset: '2px',
+            backgroundColor: 'rgba(255, 255, 255, 0.12)',
           },
         },
       },
@@ -127,6 +148,11 @@ export const theme = createTheme({
         root: {
           fontWeight: 500,
           borderRadius: 8,
+          transition: 'all 0.2s ease-in-out',
+          '&.MuiChip-clickable:focus-visible': {
+            outline: '2px solid #818cf8',
+            outlineOffset: '2px',
+          },
         },
       },
     },

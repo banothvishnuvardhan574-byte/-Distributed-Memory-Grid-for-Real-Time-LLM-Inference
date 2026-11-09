@@ -1,16 +1,55 @@
-# React + Vite
+# MemoryGrid frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+## Run locally
 
-Currently, two official plugins are available:
+Start the backend from the repository root in one terminal:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --reload
+```
 
-## React Compiler
+In a second terminal, install dependencies and start Vite from the `frontend`
+directory:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
 
-## Expanding the Oxlint configuration
+Open <http://localhost:5173>. Vite proxies `/health` and `/api` requests to
+`http://localhost:8000` by default, so no frontend environment file is needed
+for the local setup.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+To call a different backend directly, set `VITE_API_URL` in
+`frontend/.env.local`, for example:
+
+```text
+VITE_API_URL=http://localhost:8000
+```
+
+Restart Vite after changing the environment file. For a different frontend
+origin, configure the backend's `CORS_ORIGINS` setting to allow that origin.
+
+## Demo workflows
+
+- **Prompt:** Enter a prompt and submit it. The response panel shows the worker
+  response, request status, latency, request ID, and cache result. Repeating a
+  prompt within the cache lifetime should report a cache hit.
+- **PDF lookup:** In the PDF lookup section, choose a PDF and optionally specify
+  a day and month, then select **Find date**. The result shows the target date,
+  match count, and matching sentences, or a no-matches message. Upload or
+  processing failures are shown in the UI.
+
+The backend currently uses a stub inference function, so prompt responses are
+for demonstrating API, cache, and UI behavior rather than production inference.
+
+## Frontend checks
+
+Run these commands from `frontend`:
+
+```powershell
+npm run build
+npm run lint
+```

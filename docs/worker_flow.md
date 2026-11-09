@@ -364,6 +364,53 @@ Command:
 python -m pytest -q
 ```
 
-**Latest observed result: 127 passed in 22.81 seconds.**
+**Earlier observed result (before 9 November 2026): 127 passed in 22.81 seconds.**
 
 The automated test suite and genuine model integration test were performed separately. The 127 passing tests do not represent a 127-test real-model inference run.
+
+
+## 14. Latest Main Sync and Regression Verification
+
+**Verification date:** 9 November 2026
+
+### Latest main integration
+
+The local `nikhila-worker` branch was updated with the latest `origin/main` commit:
+
+- Main commit: `4fa12a2`
+- Update method: Fast-forward merge.
+- The update included API-side prompt coalescing.
+- Added test file: `tests/test_prompt_coalescing.py`.
+
+### Prompt coalescing
+
+The updated backend supports sharing one inference operation between concurrent identical prompts.
+
+The new tests verify:
+- Concurrent identical prompts share one inference operation.
+- Inference failures reach waiting requests, and a subsequent retry can succeed.
+
+The existing Worker interface remains compatible. No direct changes to `worker/worker.py` were required for this update.
+
+### Latest regression test
+
+Command:
+
+```powershell
+python -m pytest -q
+
+```
+
+**Observed result: 129 passed in 22.60 seconds.**
+
+The full automated regression suite passed after synchronising with the latest main branch.
+
+### Git verification
+
+The comparison between `origin/main` and the local branch returned:
+
+```text
+0    0
+```
+
+This confirms that the local branch contains the same commit history as the latest main branch at the time of verification.

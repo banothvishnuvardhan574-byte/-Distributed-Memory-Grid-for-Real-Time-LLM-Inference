@@ -8,14 +8,34 @@ def day11_test_inference(prompt: str) -> str:
 
 
 def test_prompt_endpoint_rejects_missing_prompt():
-    with TestClient(main.app) as client:
+    with TestClient(
+        main.app,
+        headers={"X-API-Key": "test-api-key"},
+    ) as client:
         response = client.post("/api/prompt", json={})
 
     assert response.status_code == 422
 
 
+def test_prompt_endpoint_rejects_malformed_json():
+    with TestClient(
+        main.app,
+        headers={"X-API-Key": "test-api-key"},
+    ) as client:
+        response = client.post(
+            "/api/prompt",
+            content='{"prompt":',
+            headers={"content-type": "application/json"},
+        )
+
+    assert response.status_code == 422
+
+
 def test_prompt_endpoint_rejects_blank_prompt():
-    with TestClient(main.app) as client:
+    with TestClient(
+        main.app,
+        headers={"X-API-Key": "test-api-key"},
+    ) as client:
         response = client.post(
             "/api/prompt",
             json={"prompt": "   "},
@@ -25,7 +45,7 @@ def test_prompt_endpoint_rejects_blank_prompt():
     assert response.json()["detail"] == "Prompt cannot be empty"
 
 
-def test_prompt_endpoint_returns_expected_response_fields(monkeypatch):
+def test_mocked_prompt_endpoint_returns_expected_response_fields(monkeypatch):
     expected_request_id = "day11-prompt-response-test"
     prompt = "day11 prompt response"
 
@@ -34,7 +54,10 @@ def test_prompt_endpoint_returns_expected_response_fields(monkeypatch):
 
     main.grid_clear()
     try:
-        with TestClient(main.app) as client:
+        with TestClient(
+            main.app,
+            headers={"X-API-Key": "test-api-key"},
+        ) as client:
             response = client.post(
                 "/api/prompt",
                 json={"prompt": prompt},
@@ -50,7 +73,11 @@ def test_prompt_endpoint_returns_expected_response_fields(monkeypatch):
             "response",
             "cache",
             "error",
+            "latency_ms",
+
         }
+        assert isinstance(payload["latency_ms"], int)
+        assert payload["latency_ms"] >= 0
         assert payload["request_id"] == expected_request_id
         assert payload["status"] == "completed"
         assert payload["prompt"] == prompt

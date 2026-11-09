@@ -23,8 +23,14 @@ def test_health_check_returns_ok():
 def test_prompt_roundtrip_uses_grid_cache_and_worker():
     prompt = f"day5 integration {uuid4()}"
 
-    first_response = submit_prompt(PromptRequest(prompt=prompt))
-    second_response = submit_prompt(PromptRequest(prompt=prompt))
+    first_response = submit_prompt(
+        PromptRequest(prompt=prompt),
+        x_api_key="test-api-key",
+    )
+    second_response = submit_prompt(
+        PromptRequest(prompt=prompt),
+        x_api_key="test-api-key",
+    )
 
     # Convert Pydantic models to dictionaries
     first_response = first_response.model_dump()
@@ -52,13 +58,19 @@ def test_grid_stats_reports_cache_hits_misses_and_hit_rate():
     assert initial_stats["cache_misses"] == 0
     assert initial_stats["hit_rate"] == 0.0
 
-    assert submit_prompt(PromptRequest(prompt=prompt)).cache == "miss"
+    assert submit_prompt(
+        PromptRequest(prompt=prompt),
+        x_api_key="test-api-key",
+    ).cache == "miss"
     miss_stats = grid_stats()
     assert miss_stats["cache_hits"] == 0
     assert miss_stats["cache_misses"] == 1
     assert miss_stats["hit_rate"] == 0.0
 
-    assert submit_prompt(PromptRequest(prompt=prompt)).cache == "hit"
+    assert submit_prompt(
+        PromptRequest(prompt=prompt),
+        x_api_key="test-api-key",
+    ).cache == "hit"
     hit_stats = grid_stats()
     assert hit_stats["cache_hits"] == 1
     assert hit_stats["cache_misses"] == 1
@@ -83,7 +95,10 @@ def test_prompt_returns_failure_when_worker_fails(monkeypatch):
     monkeypatch.setattr(main, "process_prompt", failing_process_prompt)
 
     with pytest.raises(HTTPException) as exc_info:
-        main.submit_prompt(main.PromptRequest(prompt="failure test"))
+        main.submit_prompt(
+            main.PromptRequest(prompt="failure test"),
+            x_api_key="test-api-key",
+        )
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == "Failed to process prompt"
@@ -93,8 +108,14 @@ def test_prompt_returns_failure_when_worker_fails(monkeypatch):
 def test_grid_clear():
     prompt = f"clear grid integration {uuid4()}"
 
-    assert submit_prompt(PromptRequest(prompt=prompt)).cache == "miss"
-    assert submit_prompt(PromptRequest(prompt=prompt)).cache == "hit"
+    assert submit_prompt(
+        PromptRequest(prompt=prompt),
+        x_api_key="test-api-key",
+    ).cache == "miss"
+    assert submit_prompt(
+        PromptRequest(prompt=prompt),
+        x_api_key="test-api-key",
+    ).cache == "hit"
 
     route = next(
         route
@@ -151,4 +172,3 @@ def test_prompt_reprocesses_after_cached_response_expires(monkeypatch):
     assert third["cache"] == "miss"
     assert third["response"] == "response-2"
     assert len(calls) == 2
-

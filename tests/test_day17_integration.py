@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-API-Key": "test-api-key"})
 
 
 def test_app_imports_and_home():

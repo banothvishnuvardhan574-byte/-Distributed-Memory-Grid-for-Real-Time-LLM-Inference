@@ -89,6 +89,7 @@ currently uses a deterministic stub rather than a production LLM provider.
 ## Features
 
 - Prompt API with cache miss/hit responses and process-isolated worker handling.
+- Coalescing for concurrent identical prompts so only one inference runs.
 - Grid health and statistics, including per-node entries and cache hit rate.
 - Stable hash-modulo routing, TTL expiration, and per-node LRU eviction.
 - PDF upload for text extraction and date matching.
@@ -135,6 +136,10 @@ Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 | `POST` | `/api/grid/clear` | Clear cached entries and reset cache metrics. |
 
 Use `/docs` for the live request and response schemas.
+
+Concurrent requests for the same uncached prompt share one inference; each
+request still receives its own request ID. The shared response is reported as a
+cache hit for waiting requests.
 
 `POST /api/prompt` requires an `X-API-Key` header and allows 30 requests per
 key per 60 seconds per API process. Configure accepted keys as a comma-separated

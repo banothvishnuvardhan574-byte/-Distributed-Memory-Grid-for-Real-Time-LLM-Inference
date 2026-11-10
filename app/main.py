@@ -537,14 +537,16 @@ def submit_job(request: PromptRequest):
 @app.get("/api/jobs")
 def list_jobs(
     limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     status: str | None = None,
 ):
     with jobs_lock:
-        recent_jobs = [
+        matching_jobs = [
             (job_id, job)
             for job_id, job in reversed(list(jobs.items()))
             if status is None or job.get("status") == status
-        ][:limit]
+        ]
+        recent_jobs = matching_jobs[offset:offset + limit]
 
     return {
         "count": len(recent_jobs),

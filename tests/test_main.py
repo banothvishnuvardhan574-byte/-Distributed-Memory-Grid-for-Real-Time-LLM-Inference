@@ -7,7 +7,7 @@ import app.main as main
 from app.main import app
 
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-API-Key": "test-api-key"})
 
 
 def test_home_returns_ready_status():
@@ -39,7 +39,10 @@ def test_submit_prompt_trims_prompt_and_returns_request_id():
         "response",
         "cache",
         "error",
+        "latency_ms",
     }
+    assert isinstance(response_body["latency_ms"], int)
+    assert response_body["latency_ms"] >= 0
     assert response_body["status"] == "completed"
     assert response_body["prompt"] == "hello"
     assert response_body["response"] == "[stub] echo: hello"

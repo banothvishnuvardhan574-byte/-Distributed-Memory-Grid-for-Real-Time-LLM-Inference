@@ -5,6 +5,8 @@ import re
 import threading
 import time
 from collections import deque
+from concurrent.futures import Future
+from contextlib import asynccontextmanager
 from calendar import month_abbr, month_name
 from datetime import date
 from typing import Any
@@ -14,6 +16,7 @@ from fastapi import (
     FastAPI,
     File,
     Form,
+    Header,
     HTTPException,
     Query,
     Request,
@@ -25,7 +28,11 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.grid.memory_grid import MemoryGrid
-from worker.worker import process_prompt
+from worker.worker import (
+    adapter_inference,
+    process_prompt,
+    shutdown_worker,
+)
 
 try:
     from pypdf import PdfReader
@@ -40,10 +47,27 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("memgrid")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(
+        "MemoryGrid started: nodes=%s, ttl=%ss, capacity_per_node=%s",
+        settings.node_count,
+        settings.default_ttl_seconds,
+        settings.cache_size_per_node,
+    )
+
+    try:
+        yield
+    finally:
+        shutdown_worker()
+        logger.info("Inference worker shut down")
+
+
 app = FastAPI(
     title=settings.app_name,
     description="Backend API for real-time LLM inference",
     version=settings.version,
+    lifespan=lifespan,
 )
 
 
@@ -89,7 +113,7 @@ class PromptResponse(BaseModel):
     response: str | None
     cache: str
     error: str | None = None
-
+    latency_ms: int = 0
 
 # --------------------------------------------------
 # Memory grid and metrics
@@ -104,60 +128,118 @@ cache_metrics = {
     "hits": 0,
     "misses": 0,
 }
-
+cache_metrics_lock = threading.Lock()
+in_flight_prompts: dict[str, Future[dict[str, Any]]] = {}
+in_flight_prompts_lock = threading.Lock()
 jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = threading.Lock()
 recent_prompts: deque[dict[str, str]] = deque(maxlen=50)
 recent_prompts_lock = threading.Lock()
+API_KEYS = {
+    key.strip()
+    for key in settings.api_keys.split(",")
+    if key.strip()
+}
+rate_log: dict[str, list[float]] = {}
+rate_log_lock = threading.Lock()
+RATE_LIMIT = 30
+RATE_WINDOW = 60
 
 
-@app.on_event("startup")
-def startup():
-    logger.info(
-        "MemoryGrid started: nodes=%s, ttl=%ss, capacity_per_node=%s",
-        settings.node_count,
-        settings.default_ttl_seconds,
-        settings.cache_size_per_node,
-    )
+def check_auth(x_api_key: str | None) -> None:
+    if x_api_key not in API_KEYS:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key",
+        )
+
+    now = time.monotonic()
+    with rate_log_lock:
+        hits = [
+            timestamp
+            for timestamp in rate_log.get(x_api_key, [])
+            if now - timestamp < RATE_WINDOW
+        ]
+        if len(hits) >= RATE_LIMIT:
+            rate_log[x_api_key] = hits
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded",
+            )
+
+        hits.append(now)
+        rate_log[x_api_key] = hits
+
 
 
 # --------------------------------------------------
 # Prompt processing
 # --------------------------------------------------
 
-def stub_inference(prompt: str) -> str:
-    """Fallback inference function used by the worker."""
-    return f"[stub] echo: {prompt[:200]}"
-
+# Keep this name as a compatibility hook for existing tests.
+# Production inference delegates to Suraj's real adapter.
+stub_inference = adapter_inference
 
 def run_prompt(prompt: str, request_id: str) -> dict:
-    """Return a cached response or invoke the worker."""
-    cached = grid.get(prompt)
+    """Return a cached response or share one in-flight inference."""
+    with in_flight_prompts_lock:
+        cached = grid.get(prompt)
+        if cached is not None:
+            with cache_metrics_lock:
+                cache_metrics["hits"] += 1
 
-    if cached is not None:
-        cache_metrics["hits"] += 1
+            return {
+                "request_id": request_id,
+                "status": "completed",
+                "response": cached,
+                "cache": "hit",
+                "error": None,
+            }
 
-        return {
-            "request_id": request_id,
-            "status": "completed",
-            "response": cached,
-            "cache": "hit",
-            "error": None,
-        }
+        future = in_flight_prompts.get(prompt)
+        if future is None:
+            future = Future()
+            in_flight_prompts[prompt] = future
+            is_leader = True
+        else:
+            is_leader = False
 
-    result = process_prompt(
-        request_id,
-        prompt,
-        stub_inference,
-    )
+    if not is_leader:
+        result = future.result()
+        if result.get("status") == "completed":
+            with cache_metrics_lock:
+                cache_metrics["hits"] += 1
+            return {
+                **result,
+                "request_id": request_id,
+                "cache": "hit",
+            }
+        return {**result, "request_id": request_id}
 
-    # Count a miss only when inference succeeds.
-    if result.get("status") == "completed":
-        grid.set(prompt, result["response"])
-        cache_metrics["misses"] += 1
-        result["cache"] = "miss"
+    try:
+        result = process_prompt(
+            request_id,
+            prompt,
+            stub_inference,
+        )
 
-    return result
+        # Count a miss only when inference succeeds.
+        if result.get("status") == "completed":
+            grid.set(prompt, result["response"])
+            with cache_metrics_lock:
+                cache_metrics["misses"] += 1
+            result["cache"] = "miss"
+
+        with in_flight_prompts_lock:
+            future.set_result(result)
+            in_flight_prompts.pop(prompt, None)
+
+        return result
+    except BaseException as exc:
+        with in_flight_prompts_lock:
+            future.set_exception(exc)
+            in_flight_prompts.pop(prompt, None)
+        raise
 
 
 # --------------------------------------------------
@@ -345,7 +427,11 @@ def health_check_route():
 # --------------------------------------------------
 
 @app.post("/api/prompt", response_model=PromptResponse)
-def submit_prompt(request: PromptRequest):
+def submit_prompt(
+    request: PromptRequest,
+    x_api_key: str | None = Header(default=None),
+):
+    check_auth(x_api_key)
     prompt = request.prompt.strip()
 
     if not prompt:
@@ -387,7 +473,8 @@ def submit_prompt(request: PromptRequest):
         response=result.get("response"),
         cache=result.get("cache", "miss"),
         error=result.get("error"),
-    )
+        latency_ms=result.get("latency_ms", 0),
+     )
 
 
 @app.get("/api/prompts/recent")
@@ -448,9 +535,16 @@ def submit_job(request: PromptRequest):
 
 
 @app.get("/api/jobs")
-def list_jobs(limit: int = Query(default=20, ge=1, le=100)):
+def list_jobs(
+    limit: int = Query(default=20, ge=1, le=100),
+    status: str | None = None,
+):
     with jobs_lock:
-        recent_jobs = list(jobs.items())[::-1][:limit]
+        recent_jobs = [
+            (job_id, job)
+            for job_id, job in reversed(list(jobs.items()))
+            if status is None or job.get("status") == status
+        ][:limit]
 
     return {
         "count": len(recent_jobs),
@@ -459,6 +553,20 @@ def list_jobs(limit: int = Query(default=20, ge=1, le=100)):
             for job_id, job in recent_jobs
         ],
     }
+
+
+@app.delete("/api/jobs")
+def clear_finished_jobs():
+    with jobs_lock:
+        finished_job_ids = [
+            job_id
+            for job_id, job in jobs.items()
+            if job.get("status") != "running"
+        ]
+        for job_id in finished_job_ids:
+            del jobs[job_id]
+
+    return {"removed": len(finished_job_ids)}
 
 
 @app.get("/api/jobs/{job_id}")
@@ -500,8 +608,9 @@ def grid_health():
 # Memory grid statistics endpoint
 @app.get("/api/grid/stats")
 def grid_stats():
-    hits = cache_metrics["hits"]
-    misses = cache_metrics["misses"]
+    with cache_metrics_lock:
+        hits = cache_metrics["hits"]
+        misses = cache_metrics["misses"]
     total_requests = hits + misses
 
     return {
@@ -522,8 +631,9 @@ def grid_clear():
     for node in grid.nodes:
         node.clear()
 
-    cache_metrics["hits"] = 0
-    cache_metrics["misses"] = 0
+    with cache_metrics_lock:
+        cache_metrics["hits"] = 0
+        cache_metrics["misses"] = 0
 
     return {
         "status": "cleared",

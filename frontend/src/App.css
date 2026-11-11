@@ -722,6 +722,32 @@ main {
   color: #7b8893;
 }
 
+.api-key-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #495667;
+}
+
+.api-key-field input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #dcd7c8;
+  border-radius: 8px;
+  font: 13px/1.4 'DM Sans', sans-serif;
+  background: #fffefb;
+  color: var(--ink);
+  transition: border-color 0.15s ease;
+}
+
+.api-key-field input:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+}
+
 .composer textarea {
   width: 100%;
   height: 82px;

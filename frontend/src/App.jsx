@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   AccountTreeOutlined,
-  ArchitectureOutlined,
   AttachFileOutlined,
   BarChartOutlined,
   BoltOutlined,
@@ -10,13 +9,12 @@ import {
   CloseRounded,
   ContentCopyOutlined,
   DescriptionOutlined,
+  DnsOutlined,
   ErrorOutlined,
-  HubOutlined,
   LightbulbOutlined,
-  MemoryOutlined,
   SendRounded,
-  StorageOutlined,
   TimelineOutlined,
+  ViewInArOutlined,
 } from '@mui/icons-material';
 import './App.css';
 
@@ -96,7 +94,7 @@ function Topology({ gridStats }) {
             >
               <span className="node-icon-wrapper">
                 <span className="node-pulse-ring" aria-hidden="true" />
-                {isStorage ? <StorageOutlined /> : <MemoryOutlined />}
+                {isStorage ? <DnsOutlined /> : <ViewInArOutlined />}
               </span>
               <div className="node-meta">
                 <b>{nodeName(node.node_id)}</b>
@@ -152,7 +150,7 @@ function Topology({ gridStats }) {
       </div>
 
       <div className="legend">
-        <span><i className="available" />Available</span>
+        <span><i className="available" />Active</span>
         <span><i className="unavailable" />Unavailable</span>
         <small>Positions and connections are illustrative; node data is live from backend.</small>
       </div>
@@ -161,11 +159,13 @@ function Topology({ gridStats }) {
 }
 
 function Journey({ phase }) {
-  const stages = ['Preparing', 'Sending', 'Awaiting response', 'Received'];
-  const completeIndex = phase === 'idle' ? -1 : phase === 'error' ? 1 : phase === 'loading' ? 1 : 3;
+  const stages = ['Preparing', 'Sending', 'Processing', 'Completed'];
+  const completeIndex = phase === 'idle' ? -1 : phase === 'error' ? 1 : phase === 'loading' ? 2 : 3;
   const captions = phase === 'error'
-    ? ['Prompt checked', 'Request failed', 'Not reached', 'Not reached']
-    : ['Prompt checked', 'Sent to API', 'Waiting for API', 'Response received'];
+    ? ['Validating prompt', 'Request failed', 'Not reached', 'Not reached']
+    : phase === 'loading'
+      ? ['Validating prompt', 'Sending request to backend', 'Awaiting LLM response...', 'Awaiting completion']
+      : ['Validating prompt', 'Sending request to backend', 'Awaiting response from LLM', 'Response ready'];
 
   return (
     <section id="history" className="journey card">
@@ -451,7 +451,6 @@ export default function App() {
   }, [isLoading, prompt, refreshBackend]);
 
   const charCount = prompt.length;
-  const wordCount = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
   const tokenEstimate = Math.ceil(charCount / 4);
   const phase = error ? 'error' : isLoading ? 'loading' : responseData ? 'completed' : 'idle';
 
@@ -459,7 +458,7 @@ export default function App() {
     <>
       <header>
         <a className="brand" href="#top" aria-label="MemoryGrid home">
-          <span className="logo"><HubOutlined /></span>
+          <span className="logo"><ViewInArOutlined /></span>
           <span>MemoryGrid</span>
         </a>
         <nav aria-label="Primary navigation">
@@ -496,7 +495,7 @@ export default function App() {
           </p>
           <div className="features">
             <div>
-              <b><ArchitectureOutlined /></b>
+              <b><ViewInArOutlined /></b>
               <span>
                 <strong>Distributed architecture</strong>
                 <small>Multiple memory nodes working together</small>
@@ -565,10 +564,10 @@ export default function App() {
               aria-describedby="prompt-character-count"
             />
             <div className="compose-toolbar">
-              <span title="Estimated tokens use a four-characters-per-token heuristic.">
-                <AttachFileOutlined fontSize="small" />Add context unavailable <i />{' '}
-                <span id="prompt-character-count">{charCount} / 4000 characters</span> <i />{' '}
-                {wordCount} words <i /> {tokenEstimate} estimated tokens
+              <span title="Context attachments will be supported in a future update.">
+                <AttachFileOutlined fontSize="small" />Add context <i />{' '}
+                <span id="prompt-character-count">{charCount} characters</span> <i />{' '}
+                {tokenEstimate} tokens
               </span>
               <button
                 className="submit"

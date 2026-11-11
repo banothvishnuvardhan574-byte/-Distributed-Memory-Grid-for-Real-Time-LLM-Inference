@@ -97,3 +97,26 @@ run.
   `TestClient`/httpx and FastAPI `on_event` startup handling.
 - This is a local validation record dated 2026-11-02, not a CI or production
   deployment run.
+
+## Live local smoke verification
+
+**Run date:** 2026-11-11
+
+The backend and Vite frontend were started locally on `127.0.0.1:8000` and
+`127.0.0.1:5173`. These checks crossed the live HTTP API and worker, but the
+configured inference function is still `stub_inference`; this is not a real
+LLM-adapter verification.
+
+| Scenario | Actual result |
+|---|---|
+| `GET /health` | HTTP 200; `healthy`. |
+| Three unique `POST /api/prompt` requests | All HTTP 200, `completed`, with distinct request IDs and non-empty output. Responses were `[stub] echo: ...`; cache was `miss` for each. Request IDs: `60418558-406e-4345-b99b-caf41eed1984`, `64e6bbef-9295-4270-9b4c-cd0302a291f0`, `8b1caa13-e861-4788-bef0-91496ac1f5d6`. |
+| Repeat the first prompt | HTTP 200, `completed`, same cached output, new request ID `f1834952-3e9b-416f-bb70-cd4ac40fedf8`, cache `hit`. |
+| `GET /api/grid/stats` after those four requests | Actual in-memory backend reported 1 cache hit, 3 misses, 25% hit rate; three entries distributed across four live nodes. |
+| Browser prompt workflow | Loaded the frontend; submitted a prompt and saw completed status, output, request ID `80f2d2ce-7f1a-4e23-b8c4-c42976cd7b05`, latency (77 ms), and cache miss. Re-submitted the same prompt and saw cache hit with a new request ID. |
+| Frontend lint/build | `npm run lint` exited 0 with one `react(set-state-in-effect)` warning at `src/App.jsx:180`; `npm run build` succeeded (10,995 modules). |
+| Focused API/worker/cache tests | 22 passed, 0 failed; three deprecation warnings. Command: `.\.venv\Scripts\python.exe -m pytest tests\test_api_worker.py tests\test_day11_prompt_api.py tests\test_day16_integration.py tests\test_day17_integration.py tests\test_worker.py -q`. |
+
+This smoke check did not exercise a PDF upload in the browser or a real
+inference provider. Genuine inference remains blocked until the adapter is
+wired/configured and its model service is available.

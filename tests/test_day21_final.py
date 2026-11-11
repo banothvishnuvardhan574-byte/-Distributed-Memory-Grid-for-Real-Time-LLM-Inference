@@ -10,6 +10,7 @@ from app.main import app
 
 
 client = TestClient(app)
+HEADERS = {"X-API-Key": "test-api-key"}
 
 
 def _wait_for_job(job_id: str) -> dict:
@@ -29,6 +30,7 @@ def test_job_lifecycle():
     response = client.post(
         "/api/jobs",
         json={"prompt": f"day21 lifecycle {uuid4()}"},
+        headers=HEADERS,
     )
 
     assert response.status_code == 202
@@ -62,6 +64,7 @@ def test_job_submission_returns_before_inference_finishes(monkeypatch):
         client.post,
         "/api/jobs",
         json={"prompt": f"day21 nonblocking {uuid4()}"},
+        headers=HEADERS,
     )
     job_id: str | None = None
 
@@ -84,7 +87,11 @@ def test_job_reports_worker_failure(monkeypatch):
         raise RuntimeError("test worker failure")
 
     monkeypatch.setattr(main, "run_prompt", fail_prompt)
-    response = client.post("/api/jobs", json={"prompt": "day21 failure"})
+    response = client.post(
+        "/api/jobs",
+        json={"prompt": "day21 failure"},
+        headers=HEADERS,
+    )
 
     assert response.status_code == 202
     job = _wait_for_job(response.json()["job_id"])
@@ -97,7 +104,11 @@ def test_job_not_found():
 
 
 def test_job_empty_prompt():
-    response = client.post("/api/jobs", json={"prompt": "  "})
+    response = client.post(
+        "/api/jobs",
+        json={"prompt": "  "},
+        headers=HEADERS,
+    )
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Prompt cannot be empty"

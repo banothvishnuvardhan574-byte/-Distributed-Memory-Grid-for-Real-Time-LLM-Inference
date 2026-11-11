@@ -125,7 +125,7 @@ Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 | `GET` | `/` | API readiness response. |
 | `GET` | `/health` | Backend health check. |
 | `POST` | `/api/prompt` | Submit a prompt; repeated prompts can return a cache hit. |
-| `POST` | `/api/jobs` | Submit a prompt for asynchronous processing. |
+| `POST` | `/api/jobs` | Submit a prompt for asynchronous processing (requires `X-API-Key`). |
 | `GET` | `/api/jobs` | List jobs, newest first; optional `status`, `limit` (1–100), and non-negative `offset` for pagination. |
 | `DELETE` | `/api/jobs` | Remove finished jobs while preserving jobs still running. |
 | `GET` | `/api/jobs/{job_id}` | Read the status and result of a submitted job. |
@@ -141,9 +141,10 @@ Concurrent requests for the same uncached prompt share one inference; each
 request still receives its own request ID. The shared response is reported as a
 cache hit for waiting requests.
 
-`POST /api/prompt` requires an `X-API-Key` header and allows 30 requests per
-key per 60 seconds per API process. Configure accepted keys as a comma-separated
-`API_KEYS` value in the backend environment (for example, in `.env`):
+`POST /api/prompt` and `POST /api/jobs` require an `X-API-Key` header and allow
+30 requests per key per 60 seconds per API process. Configure accepted keys as
+a comma-separated `API_KEYS` value in the backend environment (for example, in
+`.env`):
 
 ```dotenv
 API_KEYS=replace-with-a-long-random-key

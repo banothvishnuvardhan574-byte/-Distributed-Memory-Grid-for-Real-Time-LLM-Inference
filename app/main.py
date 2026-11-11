@@ -504,7 +504,11 @@ def _run_job(job_id: str, prompt: str) -> None:
 
 
 @app.post("/api/jobs", status_code=202)
-def submit_job(request: PromptRequest):
+def submit_job(
+    request: PromptRequest,
+    x_api_key: str | None = Header(default=None),
+):
+    check_auth(x_api_key)
     prompt = request.prompt.strip()
     if not prompt:
         raise HTTPException(

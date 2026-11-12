@@ -553,7 +553,7 @@ def list_jobs(
         recent_jobs = matching_jobs[offset:offset + limit]
 
     return {
-        "count": len(recent_jobs),
+        "count": len(matching_jobs),
         "jobs": [
             {"job_id": job_id, "status": job["status"]}
             for job_id, job in recent_jobs

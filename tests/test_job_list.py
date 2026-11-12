@@ -21,7 +21,7 @@ def test_list_jobs_returns_latest_jobs_first_and_respects_limit():
 
         assert response.status_code == 200
         assert response.json() == {
-            "count": 2,
+            "count": 3,
             "jobs": [
                 {"job_id": "job-3", "status": "failed"},
                 {"job_id": "job-2", "status": "running"},
@@ -65,7 +65,7 @@ def test_list_jobs_filters_by_status_before_applying_limit():
 
         assert response.status_code == 200
         assert response.json() == {
-            "count": 1,
+            "count": 2,
             "jobs": [{"job_id": "completed-2", "status": "completed"}],
         }
     finally:
@@ -96,7 +96,7 @@ def test_list_jobs_applies_offset_after_status_filtering():
 
         assert response.status_code == 200
         assert response.json() == {
-            "count": 1,
+            "count": 3,
             "jobs": [{"job_id": "completed-2", "status": "completed"}],
         }
     finally:

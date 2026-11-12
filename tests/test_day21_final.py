@@ -16,7 +16,7 @@ HEADERS = {"X-API-Key": "test-api-key"}
 def _wait_for_job(job_id: str) -> dict:
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
-        response = client.get(f"/api/jobs/{job_id}")
+        response = client.get(f"/api/jobs/{job_id}", headers=HEADERS)
         assert response.status_code == 200
         job = response.json()
         if job["status"] != "running":
@@ -73,7 +73,10 @@ def test_job_submission_returns_before_inference_finishes(monkeypatch):
         response = future.result(timeout=2)
         assert response.status_code == 202
         job_id = response.json()["job_id"]
-        assert client.get(f"/api/jobs/{job_id}").json()["status"] == "running"
+        assert client.get(
+            f"/api/jobs/{job_id}",
+            headers=HEADERS,
+        ).json()["status"] == "running"
     finally:
         release_inference.set()
         executor.shutdown(wait=True)
@@ -100,7 +103,10 @@ def test_job_reports_worker_failure(monkeypatch):
 
 
 def test_job_not_found():
-    assert client.get("/api/jobs/nonexistent").status_code == 404
+    assert client.get(
+        "/api/jobs/nonexistent",
+        headers=HEADERS,
+    ).status_code == 404
 
 
 def test_job_empty_prompt():

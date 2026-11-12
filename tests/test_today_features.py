@@ -73,13 +73,14 @@ def test_jobs_list_filter_and_delete_finished_jobs():
         )
 
     try:
-        all_jobs = client.get("/api/jobs")
+        all_jobs = client.get("/api/jobs", headers=HEADERS)
         completed_jobs = client.get(
             "/api/jobs",
             params={"status": "completed"},
+            headers=HEADERS,
         )
-        cleared = client.delete("/api/jobs")
-        remaining_jobs = client.get("/api/jobs")
+        cleared = client.delete("/api/jobs", headers=HEADERS)
+        remaining_jobs = client.get("/api/jobs", headers=HEADERS)
 
         assert all_jobs.status_code == 200
         assert all_jobs.json()["count"] == 3
@@ -106,7 +107,11 @@ def test_jobs_list_returns_empty_result_for_unmatched_status():
         main.jobs["failed-1"] = {"status": "failed", "result": {}}
 
     try:
-        response = client.get("/api/jobs", params={"status": "completed"})
+        response = client.get(
+            "/api/jobs",
+            params={"status": "completed"},
+            headers=HEADERS,
+        )
 
         assert response.status_code == 200
         assert response.json() == {"count": 0, "jobs": []}

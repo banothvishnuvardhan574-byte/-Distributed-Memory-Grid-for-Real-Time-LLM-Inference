@@ -50,6 +50,16 @@ def test_async_job_submission_accepts_configured_api_key():
     assert response.status_code == 202
 
 
+def test_async_job_management_requires_api_key():
+    responses = [
+        client.get("/api/jobs"),
+        client.get("/api/jobs/nonexistent"),
+        client.delete("/api/jobs"),
+    ]
+
+    assert [response.status_code for response in responses] == [401, 401, 401]
+
+
 def test_prompt_rate_limit_is_per_key(monkeypatch):
     monkeypatch.setattr(main, "RATE_LIMIT", 2)
     monkeypatch.setattr(

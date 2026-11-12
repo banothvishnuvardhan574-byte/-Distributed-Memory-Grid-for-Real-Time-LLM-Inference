@@ -9,7 +9,7 @@ from concurrent.futures import Future
 from contextlib import asynccontextmanager
 from calendar import month_abbr, month_name
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import (
@@ -146,13 +146,16 @@ RATE_LIMIT = 30
 RATE_WINDOW = 60
 
 
-def check_auth(x_api_key: str | None) -> None:
+def verify_api_key(x_api_key: str | None) -> None:
     if x_api_key not in API_KEYS:
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing API key",
         )
 
+
+def check_auth(x_api_key: str | None) -> None:
+    verify_api_key(x_api_key)
     now = time.monotonic()
     with rate_log_lock:
         hits = [
@@ -542,8 +545,10 @@ def submit_job(
 def list_jobs(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    status: str | None = None,
+    status: Literal["running", "completed", "failed"] | None = None,
+    x_api_key: str | None = Header(default=None),
 ):
+    verify_api_key(x_api_key)
     with jobs_lock:
         matching_jobs = [
             (job_id, job)
@@ -553,7 +558,7 @@ def list_jobs(
         recent_jobs = matching_jobs[offset:offset + limit]
 
     return {
-        "count": len(recent_jobs),
+        "count": len(matching_jobs),
         "jobs": [
             {"job_id": job_id, "status": job["status"]}
             for job_id, job in recent_jobs
@@ -562,7 +567,10 @@ def list_jobs(
 
 
 @app.delete("/api/jobs")
-def clear_finished_jobs():
+def clear_finished_jobs(
+    x_api_key: str | None = Header(default=None),
+):
+    verify_api_key(x_api_key)
     with jobs_lock:
         finished_job_ids = [
             job_id
@@ -576,7 +584,11 @@ def clear_finished_jobs():
 
 
 @app.get("/api/jobs/{job_id}")
-def job_status(job_id: str):
+def job_status(
+    job_id: str,
+    x_api_key: str | None = Header(default=None),
+):
+    verify_api_key(x_api_key)
     with jobs_lock:
         job = jobs.get(job_id)
         if job is None:

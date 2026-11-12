@@ -126,9 +126,9 @@ Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 | `GET` | `/health` | Backend health check. |
 | `POST` | `/api/prompt` | Submit a prompt; repeated prompts can return a cache hit. |
 | `POST` | `/api/jobs` | Submit a prompt for asynchronous processing (requires `X-API-Key`). |
-| `GET` | `/api/jobs` | List jobs, newest first; optional `status` (`running`, `completed`, or `failed`), `limit` (1–100), and non-negative `offset` for pagination. `count` is the total number matching the status filter, before pagination. |
-| `DELETE` | `/api/jobs` | Remove finished jobs while preserving jobs still running. |
-| `GET` | `/api/jobs/{job_id}` | Read the status and result of a submitted job. |
+| `GET` | `/api/jobs` | List jobs, newest first; requires `X-API-Key`. Optional `status` (`running`, `completed`, or `failed`), `limit` (1–100), and non-negative `offset` for pagination. `count` is the total number matching the status filter, before pagination. |
+| `DELETE` | `/api/jobs` | Remove finished jobs while preserving jobs still running (requires `X-API-Key`). |
+| `GET` | `/api/jobs/{job_id}` | Read the status and result of a submitted job (requires `X-API-Key`). |
 | `POST` | `/api/pdf/today` | Extract PDF text and find date-matching content. |
 | `GET` | `/api/grid/config` | Read grid configuration. |
 | `GET` | `/api/grid/health` | Read grid health and cached-entry totals. |
@@ -141,10 +141,11 @@ Concurrent requests for the same uncached prompt share one inference; each
 request still receives its own request ID. The shared response is reported as a
 cache hit for waiting requests.
 
-`POST /api/prompt` and `POST /api/jobs` require an `X-API-Key` header and allow
-30 requests per key per 60 seconds per API process. Configure accepted keys as
-a comma-separated `API_KEYS` value in the backend environment (for example, in
-`.env`):
+All `/api/jobs` endpoints and `POST /api/prompt` require an `X-API-Key` header.
+Prompt and job submissions allow 30 requests per key per 60 seconds per API
+process; reading or clearing jobs does not consume that submission limit.
+Configure accepted keys as a comma-separated `API_KEYS` value in the backend
+environment (for example, in `.env`):
 
 ```dotenv
 API_KEYS=replace-with-a-long-random-key

@@ -9,7 +9,7 @@ from concurrent.futures import Future
 from contextlib import asynccontextmanager
 from calendar import month_abbr, month_name
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import (
@@ -542,7 +542,7 @@ def submit_job(
 def list_jobs(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    status: str | None = None,
+    status: Literal["running", "completed", "failed"] | None = None,
 ):
     with jobs_lock:
         matching_jobs = [

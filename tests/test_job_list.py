@@ -44,6 +44,13 @@ def test_list_jobs_rejects_out_of_range_limit():
     assert negative_offset.status_code == 422
 
 
+def test_list_jobs_rejects_unknown_status():
+    with TestClient(main.app) as client:
+        response = client.get("/api/jobs", params={"status": "queued"})
+
+    assert response.status_code == 422
+
+
 def test_list_jobs_filters_by_status_before_applying_limit():
     with main.jobs_lock:
         original_jobs = main.jobs.copy()

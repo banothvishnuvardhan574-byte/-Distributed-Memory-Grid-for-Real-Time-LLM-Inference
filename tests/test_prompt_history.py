@@ -89,3 +89,179 @@ def test_recent_prompts_keeps_only_latest_50(monkeypatch):
     finally:
         with main.recent_prompts_lock:
             main.recent_prompts.clear()
+
+
+def test_recent_prompts_supports_limit():
+    with main.recent_prompts_lock:
+        original_prompts = list(main.recent_prompts)
+        main.recent_prompts.clear()
+        main.recent_prompts.extend(
+            {
+                "request_id": f"history-request-{index}",
+                "prompt": f"prompt {index}",
+                "status": "completed",
+                "cache": "miss",
+            }
+            for index in reversed(range(3))
+        )
+
+    try:
+        with TestClient(main.app) as client:
+            response = client.get(
+                "/api/prompts/recent",
+                params={"limit": 2},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "count": 3,
+            "prompts": [
+                {
+                    "request_id": "history-request-2",
+                    "prompt": "prompt 2",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+                {
+                    "request_id": "history-request-1",
+                    "prompt": "prompt 1",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+            ],
+        }
+    finally:
+        with main.recent_prompts_lock:
+            main.recent_prompts.clear()
+            main.recent_prompts.extend(original_prompts)
+
+
+def test_recent_prompts_supports_offset():
+    with main.recent_prompts_lock:
+        original_prompts = list(main.recent_prompts)
+        main.recent_prompts.clear()
+        main.recent_prompts.extend(
+            {
+                "request_id": f"history-request-{index}",
+                "prompt": f"prompt {index}",
+                "status": "completed",
+                "cache": "miss",
+            }
+            for index in reversed(range(3))
+        )
+
+    try:
+        with TestClient(main.app) as client:
+            response = client.get(
+                "/api/prompts/recent",
+                params={"limit": 1, "offset": 1},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "count": 3,
+            "prompts": [
+                {
+                    "request_id": "history-request-1",
+                    "prompt": "prompt 1",
+                    "status": "completed",
+                    "cache": "miss",
+                }
+            ],
+        }
+    finally:
+        with main.recent_prompts_lock:
+            main.recent_prompts.clear()
+            main.recent_prompts.extend(original_prompts)
+
+
+def test_recent_prompts_rejects_invalid_pagination():
+    with TestClient(main.app) as client:
+        invalid_limit = client.get(
+            "/api/prompts/recent",
+            params={"limit": 0},
+        )
+        oversized_limit = client.get(
+            "/api/prompts/recent",
+            params={"limit": 51},
+        )
+        negative_offset = client.get(
+            "/api/prompts/recent",
+            params={"offset": -1},
+        )
+
+    assert invalid_limit.status_code == 422
+    assert oversized_limit.status_code == 422
+    assert negative_offset.status_code == 422
+
+
+def test_recent_prompts_filters_before_pagination():
+    with main.recent_prompts_lock:
+        original_prompts = list(main.recent_prompts)
+        main.recent_prompts.clear()
+        main.recent_prompts.extend(
+            [
+                {
+                    "request_id": "completed-3",
+                    "prompt": "newest completed",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+                {
+                    "request_id": "failed-1",
+                    "prompt": "failed prompt",
+                    "status": "failed",
+                    "cache": "miss",
+                },
+                {
+                    "request_id": "completed-2",
+                    "prompt": "middle completed",
+                    "status": "completed",
+                    "cache": "hit",
+                },
+                {
+                    "request_id": "completed-1",
+                    "prompt": "oldest completed",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+            ]
+        )
+
+    try:
+        with TestClient(main.app) as client:
+            response = client.get(
+                "/api/prompts/recent",
+                params={
+                    "status": "completed",
+                    "limit": 1,
+                    "offset": 1,
+                },
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "count": 3,
+            "prompts": [
+                {
+                    "request_id": "completed-2",
+                    "prompt": "middle completed",
+                    "status": "completed",
+                    "cache": "hit",
+                }
+            ],
+        }
+    finally:
+        with main.recent_prompts_lock:
+            main.recent_prompts.clear()
+            main.recent_prompts.extend(original_prompts)
+
+
+def test_recent_prompts_rejects_unknown_status():
+    with TestClient(main.app) as client:
+        response = client.get(
+            "/api/prompts/recent",
+            params={"status": "running"},
+        )
+
+    assert response.status_code == 422

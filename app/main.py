@@ -481,10 +481,21 @@ def submit_prompt(
 
 
 @app.get("/api/prompts/recent")
-def prompts_recent():
+def prompts_recent(
+    limit: int = Query(default=50, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    status: Literal["completed", "failed"] | None = None,
+):
     with recent_prompts_lock:
-        prompts = list(recent_prompts)
-    return {"count": len(prompts), "prompts": prompts}
+        prompts = [
+            prompt
+            for prompt in recent_prompts
+            if status is None or prompt["status"] == status
+        ]
+    return {
+        "count": len(prompts),
+        "prompts": prompts[offset:offset + limit],
+    }
 
 
 def _run_job(job_id: str, prompt: str) -> None:

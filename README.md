@@ -125,6 +125,7 @@ Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 | `GET` | `/` | API readiness response. |
 | `GET` | `/health` | Backend health check. |
 | `POST` | `/api/prompt` | Submit a prompt; repeated prompts can return a cache hit. |
+| `GET` | `/api/prompts/recent` | Read recent prompts, newest first; optional `status` (`completed` or `failed`), `limit` (1–50, default 50), and non-negative `offset`. `count` is the total number matching the status filter, before pagination. |
 | `POST` | `/api/jobs` | Submit a prompt for asynchronous processing (requires `X-API-Key`). |
 | `GET` | `/api/jobs` | List jobs, newest first; requires `X-API-Key`. Optional `status` (`running`, `completed`, or `failed`), `limit` (1–100), and non-negative `offset` for pagination. `count` is the total number matching the status filter, before pagination. |
 | `DELETE` | `/api/jobs` | Remove finished jobs while preserving jobs still running (requires `X-API-Key`). |

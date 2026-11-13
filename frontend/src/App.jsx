@@ -321,7 +321,7 @@ function RequestHistory({ entries }) {
   };
 
   return (
-    <section className="history-panel card" aria-label="Session request history">
+    <section id="system" className="history-panel card" aria-label="Session request history">
       <div className="panel-title">
         <TimelineOutlined />
         <div>

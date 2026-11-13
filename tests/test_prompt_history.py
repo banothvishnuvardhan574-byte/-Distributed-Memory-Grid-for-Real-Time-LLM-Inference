@@ -193,3 +193,75 @@ def test_recent_prompts_rejects_invalid_pagination():
     assert invalid_limit.status_code == 422
     assert oversized_limit.status_code == 422
     assert negative_offset.status_code == 422
+
+
+def test_recent_prompts_filters_before_pagination():
+    with main.recent_prompts_lock:
+        original_prompts = list(main.recent_prompts)
+        main.recent_prompts.clear()
+        main.recent_prompts.extend(
+            [
+                {
+                    "request_id": "completed-3",
+                    "prompt": "newest completed",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+                {
+                    "request_id": "failed-1",
+                    "prompt": "failed prompt",
+                    "status": "failed",
+                    "cache": "miss",
+                },
+                {
+                    "request_id": "completed-2",
+                    "prompt": "middle completed",
+                    "status": "completed",
+                    "cache": "hit",
+                },
+                {
+                    "request_id": "completed-1",
+                    "prompt": "oldest completed",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+            ]
+        )
+
+    try:
+        with TestClient(main.app) as client:
+            response = client.get(
+                "/api/prompts/recent",
+                params={
+                    "status": "completed",
+                    "limit": 1,
+                    "offset": 1,
+                },
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "count": 3,
+            "prompts": [
+                {
+                    "request_id": "completed-2",
+                    "prompt": "middle completed",
+                    "status": "completed",
+                    "cache": "hit",
+                }
+            ],
+        }
+    finally:
+        with main.recent_prompts_lock:
+            main.recent_prompts.clear()
+            main.recent_prompts.extend(original_prompts)
+
+
+def test_recent_prompts_rejects_unknown_status():
+    with TestClient(main.app) as client:
+        response = client.get(
+            "/api/prompts/recent",
+            params={"status": "running"},
+        )
+
+    assert response.status_code == 422

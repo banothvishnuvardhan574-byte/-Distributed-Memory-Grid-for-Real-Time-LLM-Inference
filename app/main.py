@@ -483,12 +483,13 @@ def submit_prompt(
 @app.get("/api/prompts/recent")
 def prompts_recent(
     limit: int = Query(default=50, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
 ):
     with recent_prompts_lock:
         prompts = list(recent_prompts)
     return {
         "count": len(prompts),
-        "prompts": prompts[:limit],
+        "prompts": prompts[offset:offset + limit],
     }
 
 

@@ -133,7 +133,7 @@ in_flight_prompts: dict[str, Future[dict[str, Any]]] = {}
 in_flight_prompts_lock = threading.Lock()
 jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = threading.Lock()
-recent_prompts: deque[dict[str, str]] = deque(maxlen=50)
+recent_prompts: deque[dict[str, Any]] = deque(maxlen=50)
 recent_prompts_lock = threading.Lock()
 API_KEYS = {
     key.strip()
@@ -460,6 +460,7 @@ def submit_prompt(
                 "prompt": prompt,
                 "status": result.get("status", "failed"),
                 "cache": result.get("cache", "miss"),
+                "latency_ms": result.get("latency_ms", 0),
             }
         )
 

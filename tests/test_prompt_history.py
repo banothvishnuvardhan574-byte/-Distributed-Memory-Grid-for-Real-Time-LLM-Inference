@@ -20,6 +20,7 @@ def test_recent_prompts_lists_prompt_with_cache_status(monkeypatch):
             "response": "done",
             "cache": "hit",
             "error": None,
+            "latency_ms": 23,
         },
     )
     with main.recent_prompts_lock:
@@ -46,6 +47,7 @@ def test_recent_prompts_lists_prompt_with_cache_status(monkeypatch):
                     "prompt": prompt,
                     "status": "completed",
                     "cache": "hit",
+                    "latency_ms": 23,
                 }
             ],
         }

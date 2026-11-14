@@ -270,6 +270,59 @@ def test_recent_prompts_filters_before_pagination():
             main.recent_prompts.extend(original_prompts)
 
 
+def test_recent_prompts_searches_case_insensitively_before_pagination():
+    with main.recent_prompts_lock:
+        original_prompts = list(main.recent_prompts)
+        main.recent_prompts.clear()
+        main.recent_prompts.extend(
+            [
+                {
+                    "request_id": "match-3",
+                    "prompt": "Newest Matching PROMPT",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+                {
+                    "request_id": "other-1",
+                    "prompt": "An unrelated prompt",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+                {
+                    "request_id": "match-2",
+                    "prompt": "Another matching prompt",
+                    "status": "failed",
+                    "cache": "miss",
+                },
+            ]
+        )
+
+    try:
+        with TestClient(main.app) as client:
+            response = client.get(
+                "/api/prompts/recent",
+                params={"q": "matching", "limit": 1, "offset": 1},
+                headers=HEADERS,
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "count": 2,
+            "prompts": [
+                {
+                    "request_id": "match-2",
+                    "prompt": "Another matching prompt",
+                    "status": "failed",
+                    "cache": "miss",
+                }
+            ],
+        }
+    finally:
+        with main.recent_prompts_lock:
+            main.recent_prompts.clear()
+            main.recent_prompts.extend(original_prompts)
+
+
 def test_recent_prompts_rejects_unknown_status():
     with TestClient(main.app) as client:
         response = client.get(

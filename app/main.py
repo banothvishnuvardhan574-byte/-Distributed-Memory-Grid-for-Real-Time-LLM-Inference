@@ -485,14 +485,17 @@ def prompts_recent(
     limit: int = Query(default=50, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
     status: Literal["completed", "failed"] | None = None,
+    q: str | None = Query(default=None, max_length=4000),
     x_api_key: str | None = Header(default=None),
 ):
     verify_api_key(x_api_key)
+    search_term = q.strip().casefold() if q else ""
     with recent_prompts_lock:
         prompts = [
             prompt
             for prompt in recent_prompts
             if status is None or prompt["status"] == status
+            if not search_term or search_term in prompt["prompt"].casefold()
         ]
     return {
         "count": len(prompts),

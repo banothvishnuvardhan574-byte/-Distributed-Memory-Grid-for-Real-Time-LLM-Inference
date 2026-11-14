@@ -485,7 +485,9 @@ def prompts_recent(
     limit: int = Query(default=50, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
     status: Literal["completed", "failed"] | None = None,
+    x_api_key: str | None = Header(default=None),
 ):
+    verify_api_key(x_api_key)
     with recent_prompts_lock:
         prompts = [
             prompt

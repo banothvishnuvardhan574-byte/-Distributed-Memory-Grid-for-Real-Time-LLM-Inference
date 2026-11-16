@@ -1,182 +1,80 @@
-# Performance Test Plan
+# Reproducible Demonstration Benchmark
 
-## Goal
-Measure the latency and reliability of the app in a repeatable way using a small fixed prompt set. The plan separates:
+## What is measured
 
-1. API acknowledgement latency: time for the web API to accept and validate a prompt
-2. Real model generation latency: time spent generating a model response after the request has been accepted
+Run `scripts/performance_demo.py` from the repository root while the API is
+running. It records two distinct measurements:
 
-This matters because the current FastAPI route at `/api/prompt` acknowledges the request immediately and does not actually run model generation yet. The worker process is the correct place to measure actual generation time once the model is connected.
+1. **API round-trip:** elapsed wall time from sending `POST /api/prompt` over
+   HTTP until receiving its response. The endpoint is synchronous: a cache miss
+   waits for the worker and inference. This is not a network-only measurement
+   or an acknowledgement-only measurement.
+2. **Model generation:** elapsed time calling the configured local inference
+   adapter directly. Model load time and worker IPC are reported separately
+   and excluded from this metric.
 
----
+The adapter currently calls the model without streaming. **TTFT is not
+applicable and must not be reported.**
 
-## Fixed prompt set
-Use the same small prompt list every run. Example:
+## Environment and inputs
 
-- "What is the capital of France?"
-- "Summarize this in one sentence: AI is changing software development."
-- "Write a short greeting for a new teammate."
-- "List 3 benefits of distributed memory for LLM systems."
-- "Explain caching in one paragraph."
+The script writes a JSON report containing OS, Python version, architecture,
+CPU, physical memory (if available), installed package versions, current git
+commit/branch, model-file presence/name, run timestamps, prompts, model limits,
+and all per-sample outcomes. GPU is marked not queried rather than inferred.
 
-Use 5 prompts so the test is stable but still covers multiple lengths.
+The fixed prompt set is in `scripts/performance_demo.py`:
 
----
+1. What is the capital of France?
+2. Summarize in one sentence: AI is changing software development.
+3. Write a short greeting for a new teammate.
+4. List three benefits of distributed memory for LLM systems.
+5. Explain caching in one paragraph.
 
-## Repeat count
-Run each prompt a fixed number of times, for example:
+Defaults are one warm-up per prompt and stage, three measured runs per prompt,
+64 generated tokens, and a 20-second timeout. The report records overridden
+values. API samples include unique suffixes so previous cache entries do not
+turn the measured calls into cache-hit timings. Preserve the report alongside
+the source commit if it is used for comparison.
 
-- 20 runs per prompt
-- total = 100 requests
+## Setup and execution
 
-This gives enough data for median and p95 while keeping the test short and repeatable.
+Install the backend dependencies, start the backend in one terminal, and run
+the benchmark from another:
 
----
-
-## Timing definitions
-
-### 1) API acknowledgement latency
-Measure from request send time to HTTP response receipt for the API endpoint.
-
-- Endpoint: `POST /api/prompt`
-- Success condition: HTTP 200 and a valid `request_id`
-- Failure condition: HTTP 400/422 or network error
-- Metric: round-trip latency in milliseconds
-
-Pseudo:
-
-```python
-start = time.perf_counter()
-response = client.post("/api/prompt", json={"prompt": prompt})
-ack_latency_ms = (time.perf_counter() - start) * 1000
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe scripts\performance_demo.py --runs 3 --warmup 1 --output results\demo-run.json
 ```
 
-### 2) Real model generation latency
-Measure the actual worker execution time once the prompt has already been accepted.
+For genuine model generation, install `llama-cpp-python` and configure a local
+GGUF model:
 
-- Function: `worker.worker.process_prompt(...)`
-- Start timer before calling `process_prompt`
-- Stop timer when the worker returns a final result
-- Success condition: `status == "completed"`
-- Failure condition: `status == "failed"` or timeout
-- Metric: worker processing latency in milliseconds
-
-Pseudo:
-
-```python
-start = time.perf_counter()
-result = process_prompt(request_id, prompt, inference_fn)
-model_latency_ms = (time.perf_counter() - start) * 1000
+```powershell
+$env:LLM_MODEL_PATH = "C:\models\your-instruct-model.gguf"
+.\.venv\Scripts\python.exe scripts\performance_demo.py --runs 3 --warmup 1 --output results\demo-run.json
 ```
 
-Important: do not combine acknowledgement latency and model-generation latency into one value. They are separate stages.
+The project does not ship model weights or download a model automatically.
+Without a valid model/runtime, generation is reported as blocked with the
+adapter error. No mock/stub latency is labeled as model generation. API
+connection errors and unsuccessful HTTP responses are retained as failed
+samples instead of discarded.
 
----
+## Report interpretation
 
-## Success/failure recording
-For every request, record:
+For each measured stage, the JSON includes attempt/success/failure counts,
+success rate, mean, median, nearest-rank p95, min/max, and individual records.
+API latency summaries include failed attempts as well as successes; use the
+per-sample status and HTTP code when interpreting the result. If no samples
+were measurable, summary latencies remain `null`. Warm-up failures are listed
+separately. The model load duration is informational and is not included in
+generation latency.
 
-- timestamp_utc
-- prompt_id or prompt_index
-- prompt_text
-- request_id
-- stage (`api_ack` or `model_generation`)
-- status (`success` or `failure`)
-- http_status_code (for API only)
-- latency_ms
-- error_message (if any)
-
-Example row:
-
-```text
-timestamp_utc,prompt_id,prompt_text,request_id,stage,status,latency_ms,http_status_code,error_message
-2026-10-18T10:00:00Z,1,"What is the capital of France?",abc123,api_ack,success,32.4,200,
-```
-
----
-
-## Environment record
-Capture one environment block per test run:
-
-- date/time (UTC)
-- OS
-- Python version
-- architecture
-- CPU model
-- memory available
-- project commit/branch
-- app mode (`local`, `dev`, `prod`)
-- model type/model name (if connected)
-- worker timeout setting
-- prompt retry count
-
-Example:
-
-```text
-run_id=perf-2026-10-18-01
-platform=Windows-11
-python=3.12.7
-cpu=Intel(R) Core(TM) i7-12700H
-ram=16 GB
-fastapi=0.x.x
-worker_timeout_seconds=5.0
-```
-
----
-
-## Run procedure
-1. Freeze the prompt list
-2. Record the environment block
-3. For prompt in prompts:
-   - run it `N` times
-   - call API endpoint each time and record `api_ack` latency and result
-   - if model path is enabled, call the worker and record `model_generation` latency and result
-4. Save results to CSV/JSON
-5. Compute summary statistics:
-   - mean
-   - median
-   - p95
-   - min/max
-   - success rate
-   - failure count
-
----
-
-## Summary metrics to report
-Record the following table for each run. Keep API acknowledgement latency separate from model generation latency; leave generation values unmeasured until a real model is connected.
-
-| Metric | Definition | Current result | How to record |
-|---|---|---|---|
-| API acknowledgement latency | Mean, median, and p95 round-trip time for `POST /api/prompt` | Not measured in this report | Record `latency_ms` for every API request and summarize in milliseconds |
-| API success rate | Successful HTTP 200 responses with a valid `request_id` divided by total API requests | Not measured in this report | Report as a percentage, with failures and HTTP status codes |
-| Model generation latency | Mean, median, and p95 time for the worker to return a final model result | Not measured; real model integration is pending | Measure separately around `process_prompt(...)` once connected to the model |
-| Model success rate | Completed model responses divided by total model attempts | Not measured; real model integration is pending | Report as a percentage, with failed and timed-out attempts |
-| Failures and timeouts | Counts grouped by failure type | Not measured in this report | Count HTTP errors, worker failures, timeouts, and network errors separately |
-| Environment | OS, Python, CPU, memory, commit, app mode, model, and worker timeout | Capture for each run | Include the environment block alongside the results |
-
-Do not describe a speedup or distributed performance improvement unless comparable baseline and follow-up runs have been recorded using the same prompts, environment, and procedure.
-
----
-
-## Suggested command to run
-From the project root:
-
-```bash
-python -m pytest tests/test_performance_api.py -q
-```
-
-Or, if the project uses a dedicated benchmark script:
-
-```bash
-python tests/performance_benchmark.py --runs 20 --prompts prompts.txt --output results/performance.csv
-```
-
----
-
-## Notes for this repo
-At the moment, the API route `/api/prompt` is an acknowledgement endpoint, not a full generation endpoint. For a true performance test, use two measurements:
-
-- API acknowledgement latency through `/api/prompt`
-- model latency through the worker function `process_prompt(...)` when connected to the actual LLM or a deterministic stub
-
-This separation keeps the numbers honest and avoids treating the acknowledgement step as if it were real model generation time.
+Do not add API and generation latency together: API cache-miss timing already
+contains worker and inference time, while direct generation is a separate
+diagnostic measurement. A performance improvement claim requires a recorded
+baseline and follow-up with the same prompts, model, hardware, runtime, warm-up,
+and run count.

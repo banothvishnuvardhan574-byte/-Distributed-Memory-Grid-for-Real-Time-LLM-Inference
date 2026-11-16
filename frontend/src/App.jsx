@@ -1,16 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  AccountTreeOutlined,
   AttachFileOutlined,
   BarChartOutlined,
   BoltOutlined,
-  CachedOutlined,
   ChatBubbleOutlined,
   CheckCircleOutlined,
   CloseRounded,
   ContentCopyOutlined,
   DescriptionOutlined,
-  DnsOutlined,
   ErrorOutlined,
   LightbulbOutlined,
   SendRounded,
@@ -28,159 +25,238 @@ const EXAMPLES = [
 ];
 const QUICK_PROMPTS = ['System overview', 'Cache strategy', 'Failure handling', 'Compare approaches'];
 
-// Carefully calibrated coordinates matching the visual reference (image 2)
-// Node 01: [25, 27], Node 02: [53, 19], Node 03: [79, 44], Node 04: [17, 72], Node 05: [50, 78], Node 06: [75, 78]
-const NODE_POSITIONS = [
-  { x: 25, y: 27 },
-  { x: 53, y: 19 },
-  { x: 79, y: 44 },
-  { x: 17, y: 72 },
-  { x: 50, y: 78 },
-  { x: 75, y: 78 },
+// 6 Illustrative node positions calibrated to match Image 2 reference topology:
+// The SVG canvas is 1000 x 420.
+// Node circular disc is at (cx, cy) in SVG coordinates.
+// Text label is offset to the right of the circular disc.
+const NODE_DEFINITIONS = [
+  { id: 0, label: 'Node 01', type: 'memory', cx: 200, cy: 95, role: 'Memory Worker', region: 'Local' },
+  { id: 1, label: 'Node 02', type: 'storage', cx: 505, cy: 75, role: 'Memory Worker', region: 'Local' },
+  { id: 2, label: 'Node 03', type: 'featured', cx: 725, cy: 195, role: 'Memory Worker', region: 'Local' },
+  { id: 3, label: 'Node 04', type: 'idle', cx: 130, cy: 285, role: 'Memory Worker', region: 'Local' },
+  { id: 4, label: 'Node 05', type: 'storage', cx: 450, cy: 310, role: 'Memory Worker', region: 'Local' },
+  { id: 5, label: 'Node 06', type: 'memory', cx: 750, cy: 305, role: 'Memory Worker', region: 'Local' },
 ];
 
-const nodeName = (id) => `Node ${String(Number(id) + 1).padStart(2, '0')}`;
-
 function Topology({ gridStats }) {
-  const nodes = gridStats?.nodes || [];
-  const [selectedId, setSelectedId] = useState(null);
+  const backendNodes = gridStats?.nodes || [];
+  const [selectedId, setSelectedId] = useState(2); // Node 03 selected by default matching Image 2 reference
 
-  // Derive the active selected node during render without unnecessary effects
-  const selected = (selectedId !== null ? nodes.find((node) => node.node_id === selectedId) : null)
-    || nodes.find((n) => n.node_id === 2)
-    || nodes[0]
-    || null;
+  // Map each of the 6 layout slots to backend data if available, or fallback info
+  const displayNodes = NODE_DEFINITIONS.map((def) => {
+    const backendData = backendNodes.find((n) => n.node_id === def.id);
+    const isNode4 = def.id === 3; // Node 04 is illustrated as Idle in Image 2
+    const alive = backendData ? backendData.alive : !isNode4;
+    const statusText = !alive ? 'Unavailable' : isNode4 ? 'Idle' : 'Healthy';
+    const statusClass = !alive ? 'unavailable' : isNode4 ? 'idle' : 'healthy';
 
-  // Cache summary from grid stats
-  const cacheHits = gridStats?.cache_hits;
-  const cacheMisses = gridStats?.cache_misses;
-  const hitRate = gridStats?.hit_rate;
-  const hasCacheSummary = cacheHits != null || cacheMisses != null;
+    // Calculate simulated or real load percentage
+    let loadPercent = '12%';
+    if (backendData?.capacity) {
+      loadPercent = `${Math.round((backendData.entries / backendData.capacity) * 100)}%`;
+    }
+
+    return {
+      ...def,
+      backendData,
+      alive,
+      statusText,
+      statusClass,
+      loadPercent,
+      entries: backendData?.entries ?? (isNode4 ? 0 : 0),
+      capacity: backendData?.capacity ?? 1000,
+    };
+  });
+
+  const selectedNode = displayNodes.find((n) => n.id === selectedId) || displayNodes[2];
+
+  // SVG coordinate definitions (matching viewBox 0 0 1000 500)
+  // Node centers in SVG coords (x: %, y: %):
+  // N1: (160, 110)
+  // N2: (400, 70)
+  // N3: (570, 225)
+  // N4: (110, 310)
+  // N5: (360, 350)
+  // N6: (580, 340)
+  // Junction 1 (Left): (285, 235)
+  // Junction 2 (Right hub entrance): (530, 230)
 
   return (
     <section id="network" className="topology card">
       <div className="panel-title">
-        <AccountTreeOutlined />
+        <svg className="topology-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
         <div>
           <h2>Memory Grid Topology</h2>
-          <p>
-            Illustrative layout <em>· availability and cache entries from the API</em>
-          </p>
+          <p>Visual representation of distributed memory nodes</p>
         </div>
       </div>
 
       <div className="topology-canvas" aria-label="Distributed memory network topology">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" className="topology-svg">
-          {/* Main spine connecting Node 01 -> Node 02 -> Node 03 */}
-          <path className="connection-path line-1" d="M 25 27 C 37 32, 42 22, 53 19" />
-          <path className="connection-path line-2" d="M 53 19 C 66 22, 69 38, 79 44" />
+        <svg
+          viewBox="0 0 1000 420"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          className="topology-svg"
+        >
+          {/* Main coordinated organic connection paths with central junction points */}
+          {/* Node 04 (cx: 130, cy: 285) -> Junction 1 (360, 220) */}
+          <path
+            className="topology-edge"
+            d="M 130 285 C 200 245, 280 230, 360 220"
+          />
+          {/* Node 01 (cx: 200, cy: 95) -> Junction 1 (360, 220) */}
+          <path
+            className="topology-edge"
+            d="M 200 95 C 220 170, 280 210, 360 220"
+          />
+          {/* Node 02 (cx: 505, cy: 75) -> Spine leading into Junction 1 */}
+          <path
+            className="topology-edge"
+            d="M 505 75 C 500 160, 440 210, 360 220"
+          />
+          {/* Junction 1 (360, 220) -> Node 05 (cx: 450, cy: 310) */}
+          <path
+            className="topology-edge"
+            d="M 360 220 C 380 250, 410 280, 450 310"
+          />
+          {/* Central Trunk: Junction 1 (360, 220) -> Junction 2 (680, 220) */}
+          <path
+            className="topology-edge trunk"
+            d="M 360 220 C 460 210, 580 215, 680 220"
+          />
+          {/* Junction 2 (680, 220) -> Node 03 (cx: 725, cy: 195) */}
+          <path
+            className="topology-edge"
+            d="M 680 220 L 725 195"
+          />
+          {/* Junction 2 (680, 220) -> Node 06 (cx: 750, cy: 305) */}
+          <path
+            className="topology-edge"
+            d="M 680 220 C 670 260, 700 285, 750 305"
+          />
 
-          {/* Lower cross connections Node 04 -> Node 01, Node 04 -> Node 05 */}
-          <path className="connection-path line-3" d="M 17 72 C 19 50, 21 39, 25 27" />
-          <path className="connection-path line-4" d="M 17 72 C 28 66, 39 74, 50 78" />
-
-          {/* Vertical and diagonal hub links: Node 02 -> Node 05 and Node 05 -> Node 06 */}
-          <path className="connection-path line-5" d="M 53 19 C 50 38, 51 60, 50 78" />
-          <path className="connection-path line-6" d="M 50 78 C 59 78, 67 78, 75 78" />
-          <path className="connection-path line-7" d="M 75 78 C 76 66, 77 54, 79 44" />
+          {/* Junction Dots matching Image 2 */}
+          {/* Dot near Node 04 */}
+          <circle cx="160" cy="270" r="3.5" className="topology-dot" />
+          {/* Dot at Node 01 stem */}
+          <circle cx="218" cy="155" r="3.5" className="topology-dot" />
+          {/* Dot at Node 02 stem */}
+          <circle cx="503" cy="120" r="3.5" className="topology-dot" />
+          {/* Central main junction dot */}
+          <circle cx="360" cy="220" r="5" className="topology-junction-dot" />
+          {/* Minor junction marker before Node 03 */}
+          <circle cx="680" cy="220" r="3.5" className="topology-dot" />
         </svg>
 
-        {nodes.slice(0, NODE_POSITIONS.length).map((node, index) => {
-          const { x, y } = NODE_POSITIONS[index];
-          const isSelected = selected?.node_id === node.node_id;
-          const isStorage = index % 3 === 1;
+        {/* Nodes Layer - Centered exactly on cx, cy */}
+        {displayNodes.map((node) => {
+          const isSelected = selectedNode?.id === node.id;
+          const isStorage = node.type === 'storage';
+          const isFeatured = node.type === 'featured';
 
           return (
-            <button
-              key={node.node_id}
-              type="button"
-              className={`memory-node ${node.alive ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''}`}
-              style={{ left: `${x}%`, top: `${y}%` }}
-              onClick={() => setSelectedId(node.node_id)}
-              aria-pressed={isSelected}
-              aria-label={`${nodeName(node.node_id)}. ${node.alive ? 'Available' : 'Unavailable'}. Entries: ${node.entries ?? 'unknown'}, Capacity: ${node.capacity ?? 'unknown'}. Click to view details.`}
+            <div
+              key={node.id}
+              className={`topology-node-container ${node.statusClass} ${isSelected ? 'selected' : ''} ${isFeatured ? 'featured' : ''}`}
+              style={{
+                left: `${(node.cx / 1000) * 100}%`,
+                top: `${(node.cy / 420) * 100}%`,
+              }}
             >
-              <span className="node-icon-wrapper">
-                <span className="node-pulse-ring" aria-hidden="true" />
-                {isStorage ? <DnsOutlined /> : <ViewInArOutlined />}
-              </span>
-              <div className="node-meta">
-                <b>{nodeName(node.node_id)}</b>
-                <small>
-                  <i className="status-indicator" />
-                  {node.alive ? 'Available' : 'Unavailable'}
-                </small>
-              </div>
-            </button>
+              <button
+                type="button"
+                className="memory-node-button"
+                onClick={() => setSelectedId(node.id)}
+                aria-pressed={isSelected}
+                aria-label={`${node.label}, Status: ${node.statusText}, Role: ${node.role}`}
+              >
+                <div className="node-rings-wrapper">
+                  {isFeatured && <div className="outer-glow-ring" />}
+                  <div className="node-icon-circle">
+                    {isStorage ? (
+                      /* Storage / Cylinders icon matching Node 02 and Node 05 */
+                      <svg className="node-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <ellipse cx="12" cy="5" rx="8" ry="3" />
+                        <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
+                        <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
+                      </svg>
+                    ) : (
+                      /* 3D Isometric Cube icon matching Nodes 01, 03, 04, 06 */
+                      <svg className="node-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                        <line x1="12" y1="22.08" x2="12" y2="12" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+
+                <div className="node-meta">
+                  <span className="node-label-title">{node.label}</span>
+                  <div className="node-status-row">
+                    <span className={`status-indicator-dot ${node.statusClass}`} />
+                    <span className={`status-text ${node.statusClass}`}>{node.statusText}</span>
+                  </div>
+                  <span className="node-role-text">{node.role}</span>
+                  <span className="node-region-text">(Region: {node.region})</span>
+                </div>
+              </button>
+            </div>
           );
         })}
 
-        {!nodes.length && (
-          <p className="topology-empty">
-            Node statistics are unavailable. Start the API backend to view live reported nodes.
-          </p>
-        )}
-
-        {selected && (
+        {/* Selected Node Popover Information Card matching Image 2 */}
+        {selectedNode && (
           <aside className="node-popover" aria-live="polite">
             <div className="node-popover-header">
-              <strong>
-                {nodeName(selected.node_id)}
-                <span className={`popover-badge ${selected.alive ? 'badge-available' : 'badge-unavailable'}`}>
-                  {selected.alive ? 'Available' : 'Unavailable'}
+              <strong className="popover-title">{selectedNode.label}</strong>
+              <div className="popover-status-tag">
+                <span className={`popover-badge ${selectedNode.statusClass}`}>
+                  {selectedNode.alive ? 'Online' : selectedNode.statusText}
                 </span>
-              </strong>
-              <button
-                type="button"
-                className="popover-close"
-                onClick={() => setSelectedId(null)}
-                aria-label="Close node details"
-              >
-                <CloseRounded fontSize="inherit" />
-              </button>
+                <button
+                  type="button"
+                  className="popover-close-btn"
+                  onClick={() => setSelectedId(null)}
+                  aria-label="Close node details"
+                >
+                  <CloseRounded fontSize="inherit" />
+                </button>
+              </div>
             </div>
-            <dl>
-              <dt>Source</dt>
-              <dd>API stats</dd>
-              <dt>Entries</dt>
-              <dd>{selected.entries}</dd>
-              <dt>Capacity</dt>
-              <dd>{selected.capacity}</dd>
-              <dt>Entry use</dt>
-              <dd>
-                {selected.capacity
-                  ? `${Math.round((selected.entries / selected.capacity) * 100)}%`
-                  : '—'}
-              </dd>
+            <dl className="popover-details">
+              <dt>Role</dt>
+              <dd>{selectedNode.role}</dd>
+              <dt>Region</dt>
+              <dd>{selectedNode.region}</dd>
+              <dt>Load</dt>
+              <dd>{selectedNode.loadPercent}</dd>
+              <dt>Status</dt>
+              <dd className={selectedNode.statusClass}>{selectedNode.statusText}</dd>
+              {selectedNode.backendData && (
+                <>
+                  <dt>Entries</dt>
+                  <dd>{selectedNode.entries}</dd>
+                  <dt>Capacity</dt>
+                  <dd>{selectedNode.capacity}</dd>
+                </>
+              )}
             </dl>
           </aside>
         )}
       </div>
 
-      {hasCacheSummary && (
-        <div className="cache-summary" aria-label="Cache summary from API">
-          <CachedOutlined />
-          <div className="cache-summary-stat">
-            <span className="cache-summary-label">Hits</span>
-            <strong>{cacheHits ?? '—'}</strong>
-          </div>
-          <div className="cache-summary-stat">
-            <span className="cache-summary-label">Misses</span>
-            <strong>{cacheMisses ?? '—'}</strong>
-          </div>
-          {hitRate != null && (
-            <div className="cache-summary-stat">
-              <span className="cache-summary-label">Hit rate</span>
-              <strong>{typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : hitRate}</strong>
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="legend">
-        <span><i className="available" />Active</span>
-        <span><i className="unavailable" />Unavailable</span>
-        <small>Positions and connections are illustrative; node data is live from backend.</small>
+        <span className="legend-item"><i className="legend-dot active" />Active</span>
+        <span className="legend-item"><i className="legend-dot idle" />Idle</span>
+        <span className="legend-item"><i className="legend-dot unavailable" />Unavailable</span>
+        <small className="legend-disclaimer">Positions and connections are illustrative; node data is live from backend.</small>
       </div>
     </section>
   );

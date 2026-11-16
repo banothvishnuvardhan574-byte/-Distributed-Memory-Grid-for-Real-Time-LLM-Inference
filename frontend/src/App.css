@@ -278,8 +278,8 @@ main {
 
 .top-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 245px;
-  gap: 28px;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  gap: 20px;
 }
 
 .card {
@@ -296,50 +296,51 @@ main {
 }
 
 /* =========================================================
-   1. MEMORY GRID TOPOLOGY & VISUALIZATION
+   1. MEMORY GRID TOPOLOGY & VISUALIZATION (PASS 1 STATIC)
    ========================================================= */
 .topology {
-  min-height: 440px;
-  padding: 18px 24px 20px;
+  min-height: 480px;
+  padding: 22px 24px 18px;
   display: flex;
   flex-direction: column;
   position: relative;
+  background: #fbf9f2;
+  border: 1px solid #e7e2d4;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(28, 38, 24, 0.04);
 }
 
-.panel-title,
-.composer-title,
-.response-head {
+.topology-title-icon {
+  width: 26px;
+  height: 26px;
+  color: #1a7745;
+  flex-shrink: 0;
+}
+
+.panel-title {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
 }
 
-.panel-title h2,
-.composer h2 {
-  font-size: 18px;
+.panel-title h2 {
+  font-size: 19px;
+  font-weight: 700;
+  color: #122132;
   margin: 0;
+  letter-spacing: -0.2px;
 }
 
 .panel-title p {
   margin: 2px 0 0;
-  color: #576174;
+  color: #6a7787;
   font-size: 13px;
-}
-
-.panel-title em {
-  font-style: normal;
-  color: #748171;
-}
-
-.panel-title > svg,
-.composer-title > svg {
-  color: var(--green);
-  font-size: 26px;
+  font-weight: 400;
 }
 
 .topology-canvas {
   flex: 1;
-  min-height: 330px;
+  min-height: 380px;
   position: relative;
   margin-top: 10px;
   overflow: visible;
@@ -354,292 +355,337 @@ main {
   z-index: 1;
 }
 
-/* Smooth curved connection paths with subtle dashed animation */
-.connection-path {
+/* Organic Curved Connection Lines */
+.topology-edge {
   fill: none;
-  stroke: #489a65;
-  stroke-width: 1.4;
-  stroke-dasharray: 4 5;
+  stroke: #528c68;
+  stroke-width: 1.5;
   stroke-linecap: round;
-  opacity: 0.72;
-  animation: topology-dash 24s linear infinite;
+  stroke-linejoin: round;
+  opacity: 0.85;
 }
 
-.connection-path.line-1 { animation-duration: 22s; }
-.connection-path.line-2 { animation-duration: 26s; }
-.connection-path.line-3 { animation-duration: 20s; }
-.connection-path.line-4 { animation-duration: 25s; }
-.connection-path.line-5 { animation-duration: 28s; }
-.connection-path.line-6 { animation-duration: 24s; }
-.connection-path.line-7 { animation-duration: 22s; }
-
-@keyframes topology-dash {
-  from {
-    stroke-dashoffset: 0;
-  }
-  to {
-    stroke-dashoffset: -180;
-  }
+.topology-edge.trunk {
+  stroke-width: 1.6;
 }
 
-/* Distributed Memory Nodes */
-.memory-node {
+.topology-dot {
+  fill: #438059;
+  opacity: 0.9;
+}
+
+.topology-junction-dot {
+  fill: #3b744f;
+  stroke: #dbead9;
+  stroke-width: 2;
+}
+
+/* Topology Node Wrapper */
+.topology-node-container {
   position: absolute;
-  transform: translate(-50%, -50%);
+  /* Instead of centering the whole flex item (-50%, -50%), keep origin on the disc */
+  z-index: 3;
+}
+
+.memory-node-button {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  border: 0;
+  border: none;
   background: transparent;
-  padding: 4px 10px 4px 4px;
+  padding: 0;
   cursor: pointer;
-  z-index: 3;
-  border-radius: 999px;
   text-align: left;
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), filter 0.22s ease;
 }
 
-.memory-node:hover,
-.memory-node:focus-visible {
-  transform: translate(-50%, -50%) scale(1.06);
-  z-index: 4;
-}
-
-/* Icon bubble with concentric pulse effect */
-.node-icon-wrapper {
+.node-rings-wrapper {
   position: relative;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: #e8f3e0;
-  border: 1.5px solid #bddbb0;
+  width: 52px;
+  height: 52px;
   display: grid;
   place-items: center;
-  color: var(--green);
-  box-shadow: 0 4px 12px #10321a12;
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
   flex-shrink: 0;
+  /* Translates just the circle center onto the coordinate */
+  transform: translate(-50%, -50%);
 }
 
-.node-icon-wrapper svg {
-  font-size: 24px;
+/* Base Node Circular Background */
+.node-icon-circle {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #dbedd5;
+  border: 1.5px solid #a8d59d;
+  display: grid;
+  place-items: center;
+  color: #1b733f;
+  box-shadow: 0 2px 8px rgba(32, 60, 36, 0.08);
   position: relative;
   z-index: 2;
 }
 
-/* Pulse ring around available nodes */
-.node-pulse-ring {
+.node-svg-icon {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+}
+
+/* Featured / Selected Node Outer Rings (Node 03 style) */
+.outer-glow-ring {
   position: absolute;
-  inset: -6px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
-  border: 1.5px solid #4da96c;
-  opacity: 0;
+  background: radial-gradient(circle, rgba(200, 235, 195, 0.45) 50%, rgba(200, 235, 195, 0.1) 85%, transparent 100%);
+  border: 1px dashed rgba(75, 155, 95, 0.45);
   pointer-events: none;
   z-index: 1;
 }
 
-.memory-node.available .node-pulse-ring {
-  animation: node-pulse-wave 3.2s ease-out infinite;
+/* Status variants */
+.topology-node-container.idle .node-icon-circle {
+  background: #e2e5e8;
+  border-color: #c4cad0;
+  color: #5d6773;
+  box-shadow: 0 2px 6px rgba(40, 50, 60, 0.06);
 }
 
-.memory-node:nth-of-type(2).available .node-pulse-ring {
-  animation-delay: 0.6s;
-}
-.memory-node:nth-of-type(3).available .node-pulse-ring {
-  animation-delay: 1.2s;
-}
-.memory-node:nth-of-type(4).available .node-pulse-ring {
-  animation-delay: 1.8s;
-}
-.memory-node:nth-of-type(5).available .node-pulse-ring {
-  animation-delay: 2.4s;
-}
-.memory-node:nth-of-type(6).available .node-pulse-ring {
-  animation-delay: 0.9s;
+.topology-node-container.unavailable .node-icon-circle {
+  background: #f7dede;
+  border-color: #e5b3b3;
+  color: #c03d3d;
 }
 
-@keyframes node-pulse-wave {
-  0% {
-    transform: scale(0.92);
-    opacity: 0.7;
-  }
-  50% {
-    opacity: 0.3;
-  }
-  100% {
-    transform: scale(1.34);
-    opacity: 0;
-  }
-}
-
-.memory-node.unavailable .node-icon-wrapper {
-  background: #f7eaea;
-  border-color: #e5baba;
-  color: #c84646;
-  box-shadow: 0 3px 8px #52181810;
-}
-
-.memory-node.unavailable .node-pulse-ring {
-  display: none;
-}
-
-/* Node label and status */
+/* Node Label & Subtext Meta */
 .node-meta {
   display: flex;
   flex-direction: column;
   white-space: nowrap;
   pointer-events: none;
+  text-align: left;
+  transform: translateY(-50%);
+  margin-left: 10px;
 }
 
-.node-meta b {
-  font-size: 13px;
+.node-label-title {
+  font-size: 13.5px;
   font-weight: 700;
-  color: var(--ink);
+  color: #0c1a2b;
   line-height: 1.2;
+  margin: 0 0 2px 0;
 }
 
-.node-meta small {
+.node-status-row {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
-  color: #556272;
-  margin-top: 2px;
+  margin: 0 0 3px 0;
+  line-height: 1;
 }
 
-.status-indicator {
+.status-indicator-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   display: inline-block;
-  background: #48bf2b;
-  box-shadow: 0 0 0 2px #48bf2b22;
+  flex-shrink: 0;
 }
 
-.memory-node.unavailable .status-indicator {
-  background: #e76868;
-  box-shadow: 0 0 0 2px #e7686822;
+.status-indicator-dot.healthy {
+  background: #2ea647;
+  box-shadow: 0 0 0 2px rgba(46, 166, 71, 0.2);
 }
 
-/* Selected Node highlight */
-.memory-node.selected .node-icon-wrapper {
-  border-color: var(--green);
-  box-shadow: 0 0 0 4px #ccead2, 0 8px 18px #08753c2a;
-  transform: scale(1.08);
+.status-indicator-dot.idle {
+  background: #64748b;
+  box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.2);
 }
 
-.memory-node.selected .node-meta b {
-  color: var(--green);
+.status-indicator-dot.unavailable {
+  background: #d84444;
+  box-shadow: 0 0 0 2px rgba(216, 68, 68, 0.2);
 }
 
-/* Popover Panel positioned neatly at top-right or safe corner */
+.status-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.status-text.healthy {
+  color: #1a783b;
+}
+
+.status-text.idle {
+  color: #596577;
+}
+
+.status-text.unavailable {
+  color: #c23838;
+}
+
+.node-role-text {
+  font-size: 11px;
+  color: #677587;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.node-region-text {
+  font-size: 11px;
+  color: #677587;
+  margin: 0;
+  line-height: 1.25;
+}
+
+/* Information Popover Card matching Image 2 */
 .node-popover {
   position: absolute;
   top: 14px;
   right: 14px;
-  width: 200px;
-  background: #fffefb;
-  border: 1px solid #dcd7ca;
+  width: 190px;
+  background: #ffffff;
+  border: 1px solid #e1dcca;
   border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: 0 10px 24px #1a2c1a14;
-  z-index: 5;
-  animation: popover-fade-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes popover-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  padding: 12px 14px;
+  box-shadow: 0 8px 24px rgba(26, 42, 28, 0.08);
+  z-index: 10;
 }
 
 .node-popover-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #ebe6da;
-  padding-bottom: 8px;
+  border-bottom: 1px solid #f0ecdf;
+  padding-bottom: 9px;
 }
 
-.node-popover-header strong {
-  display: flex;
+.popover-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0c1a2b;
+}
+
+.popover-status-tag {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
-  color: var(--ink);
 }
 
 .popover-badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 2px 7px;
+  padding: 2.5px 8px;
   border-radius: 999px;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
 }
 
-.badge-available {
-  background: #e2f4dc;
-  color: #126333;
+.popover-badge.healthy {
+  background: #d5eed1;
+  color: #176d33;
 }
 
-.badge-unavailable {
-  background: #fae4e4;
+.popover-badge.idle {
+  background: #e2e6ea;
+  color: #4b5868;
+}
+
+.popover-badge.unavailable {
+  background: #fadee0;
   color: #a82e2e;
 }
 
-.popover-close {
+.popover-close-btn {
   border: 0;
   background: transparent;
-  color: #7d8995;
+  color: #7b8694;
   cursor: pointer;
-  padding: 3px;
+  padding: 2px;
   display: grid;
   place-items: center;
   font-size: 16px;
   border-radius: 4px;
-  transition: color 0.15s, background-color 0.15s;
 }
 
-.popover-close:hover {
-  color: var(--ink);
-  background: #ede8dc;
+.popover-close-btn:hover {
+  color: #0c1a2b;
+  background: #f1eddf;
 }
 
-.node-popover dl {
+.popover-details {
   display: grid;
   grid-template-columns: auto 1fr;
-  row-gap: 7px;
-  column-gap: 12px;
+  row-gap: 6px;
+  column-gap: 16px;
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
-.node-popover dt {
-  color: #6c7885;
+.popover-details dt {
+  color: #576575;
+  font-weight: 500;
 }
 
-.node-popover dd {
+.popover-details dd {
   margin: 0;
   text-align: right;
   font-weight: 600;
-  color: var(--ink);
+  color: #0c1a2b;
 }
 
-/* Legend */
+.popover-details dd.healthy {
+  color: #176d33;
+}
+
+.popover-details dd.idle {
+  color: #556272;
+}
+
+.popover-details dd.unavailable {
+  color: #b73232;
+}
+
+/* Legend Bottom Bar */
 .legend {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-top: 10px;
+  gap: 20px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #ebe5d6;
   font-size: 12px;
-  color: #556272;
-  border-top: 1px solid #eeebe2;
-  padding-top: 10px;
+  color: #485566;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dot.active {
+  background: #2da44e;
+}
+
+.legend-dot.idle {
+  background: #b8c1ca;
+}
+
+.legend-dot.unavailable {
+  background: #e55353;
+}
+
+.legend-disclaimer {
+  margin-left: auto;
+  font-size: 11px;
+  color: #788595;
 }
 
 /* Cache Summary */
@@ -1406,8 +1452,8 @@ main {
     font-size: 44px;
   }
   .node-popover {
-    top: 10px;
-    right: 10px;
+    top: 14px;
+    right: 20px;
     width: 180px;
   }
 }
@@ -1450,29 +1496,27 @@ main {
     bottom: -15px;
   }
   .topology {
-    padding: 15px;
-    min-height: 480px;
+    padding: 16px 14px;
+    min-height: 440px;
   }
   .topology-canvas {
-    min-height: 360px;
+    min-height: 330px;
   }
-  .memory-node {
+  .topology-node-container {
     transform: translate(-50%, -50%) scale(0.85);
-  }
-  .memory-node:hover,
-  .memory-node:focus-visible {
-    transform: translate(-50%, -50%) scale(0.9);
   }
   .node-popover {
     position: static;
     width: 100%;
-    margin-top: 12px;
+    margin-top: 16px;
+    right: auto;
+    top: auto;
   }
   .legend {
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 12px;
   }
-  .legend small {
+  .legend-disclaimer {
     margin-left: 0;
     width: 100%;
   }

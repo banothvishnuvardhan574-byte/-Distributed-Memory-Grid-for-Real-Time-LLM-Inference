@@ -338,11 +338,18 @@ main {
   font-weight: 400;
 }
 
+/* Two-column layout: graph canvas on left, dedicated details panel on right */
+.topology-body {
+  display: grid;
+  grid-template-columns: 1fr 210px;
+  gap: 20px;
+  margin-top: 14px;
+  align-items: stretch;
+}
+
 .topology-canvas {
-  flex: 1;
-  min-height: 380px;
   position: relative;
-  margin-top: 10px;
+  min-height: 380px;
   overflow: visible;
 }
 
@@ -380,16 +387,18 @@ main {
   stroke-width: 2;
 }
 
-/* Topology Node Wrapper */
+/* Topology Node Group: ONE tightly-coupled unit */
 .topology-node-container {
   position: absolute;
-  /* Instead of centering the whole flex item (-50%, -50%), keep origin on the disc */
+  transform: translate(-26px, -26px); /* Center 52px circle on (x, y) */
   z-index: 3;
 }
 
 .memory-node-button {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
+  gap: 8px; /* Tightly grouped label and icon */
   border: none;
   background: transparent;
   padding: 0;
@@ -404,8 +413,6 @@ main {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  /* Translates just the circle center onto the coordinate */
-  transform: translate(-50%, -50%);
 }
 
 /* Base Node Circular Background */
@@ -455,15 +462,13 @@ main {
   color: #c03d3d;
 }
 
-/* Node Label & Subtext Meta */
+/* Node Label & Subtext Meta: placed right next to icon */
 .node-meta {
   display: flex;
   flex-direction: column;
   white-space: nowrap;
   pointer-events: none;
   text-align: left;
-  transform: translateY(-50%);
-  margin-left: 10px;
 }
 
 .node-label-title {
@@ -478,7 +483,7 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin: 0 0 3px 0;
+  margin: 0 0 2px 0;
   line-height: 1;
 }
 
@@ -527,28 +532,31 @@ main {
   font-size: 11px;
   color: #677587;
   margin: 0;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .node-region-text {
   font-size: 11px;
   color: #677587;
   margin: 0;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
-/* Information Popover Card matching Image 2 */
+/* Dedicated Details Panel: Beside the topology canvas, zero overlap */
+.topology-details-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+}
+
 .node-popover {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 190px;
+  width: 100%;
   background: #ffffff;
   border: 1px solid #e1dcca;
   border-radius: 12px;
-  padding: 12px 14px;
-  box-shadow: 0 8px 24px rgba(26, 42, 28, 0.08);
-  z-index: 10;
+  padding: 14px 16px;
+  box-shadow: 0 8px 24px rgba(26, 42, 28, 0.06);
 }
 
 .node-popover-header {
@@ -614,10 +622,10 @@ main {
 .popover-details {
   display: grid;
   grid-template-columns: auto 1fr;
-  row-gap: 6px;
+  row-gap: 8px;
   column-gap: 16px;
-  margin: 10px 0 0;
-  font-size: 11.5px;
+  margin: 12px 0 0;
+  font-size: 12px;
 }
 
 .popover-details dt {
@@ -685,7 +693,7 @@ main {
 .legend-disclaimer {
   margin-left: auto;
   font-size: 11px;
-  color: #788595;
+  color: #788591;
 }
 
 /* Cache Summary */
@@ -1451,10 +1459,9 @@ main {
   .editorial h1 {
     font-size: 44px;
   }
-  .node-popover {
-    top: 14px;
-    right: 20px;
-    width: 180px;
+  .topology-body {
+    grid-template-columns: 1fr 200px;
+    gap: 16px;
   }
 }
 
@@ -1497,20 +1504,17 @@ main {
   }
   .topology {
     padding: 16px 14px;
-    min-height: 440px;
+    min-height: auto;
+  }
+  .topology-body {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
   .topology-canvas {
     min-height: 330px;
   }
   .topology-node-container {
-    transform: translate(-50%, -50%) scale(0.85);
-  }
-  .node-popover {
-    position: static;
-    width: 100%;
-    margin-top: 16px;
-    right: auto;
-    top: auto;
+    transform: translate(-26px, -26px) scale(0.85);
   }
   .legend {
     flex-wrap: wrap;

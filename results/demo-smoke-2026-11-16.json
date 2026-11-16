@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "run_id": "b6721b1c-37d8-4f77-8fe9-4fb3959f6701",
+  "started_at_utc": "2026-11-16T14:59:05.935681+00:00",
+  "configuration": {
+    "api_base_url": "http://127.0.0.1:8767",
+    "runs_per_prompt": 1,
+    "warmup_runs_per_prompt": 0,
+    "prompt_set": [
+      "What is the capital of France?",
+      "Summarize in one sentence: AI is changing software development.",
+      "Write a short greeting for a new teammate.",
+      "List three benefits of distributed memory for LLM systems.",
+      "Explain caching in one paragraph."
+    ],
+    "http_timeout_seconds": 20.0,
+    "model_timeout_seconds": 20.0,
+    "max_new_tokens": 64,
+    "ttft": {
+      "status": "not_applicable",
+      "reason": "The adapter makes non-streaming generation calls."
+    }
+  },
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.12",
+    "architecture": "AMD64",
+    "cpu": "Intel64 Family 6 Model 142 Stepping 12, GenuineIntel",
+    "physical_memory_bytes": 8385449984,
+    "gpu": "not queried",
+    "packages": {
+      "fastapi": "0.143.2",
+      "httpx": "0.28.1",
+      "pydantic": "2.14.1",
+      "pydantic-settings": "2.16.0",
+      "uvicorn": "0.54.0",
+      "pypdf": "6.20.1",
+      "llama-cpp-python": null,
+      "pytest": "9.1.1"
+    },
+    "frontend_tools": {
+      "node": "v26.8.1",
+      "npm": "11.19.0"
+    },
+    "frontend_locked_packages": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "vite": "8.3.4",
+      "oxlint": "1.88.0",
+      "@mui/material": "9.5.0"
+    },
+    "git_commit": "3adefcb97c6ca65fde983907415fb26b2f4c86f2",
+    "git_branch": "sagar-tests-docs",
+    "git_worktree_dirty": true,
+    "source_fingerprint_sha256": "9904d1cf8b7f5ecc93fd037f779c9d4a3f456bff17d509365da4f0bce53799d7",
+    "model_file_configured": false,
+    "model_file_name": null,
+    "model_file_exists": false,
+    "model_file_size_bytes": null,
+    "model_file_sha256": null,
+    "generation": {
+      "runtime": "llama-cpp-python adapter",
+      "streaming": false,
+      "max_new_tokens": 64,
+      "timeout_seconds": 20.0,
+      "warmup_per_prompt": 0,
+      "measured_runs_per_prompt": 1
+    }
+  },
+  "api_round_trip": {
+    "status": "measured",
+    "blocked_reason": null,
+    "summary": {
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "success_rate_percent": 0.0,
+      "latency_ms": {
+        "mean": 15.133,
+        "median": 8.35,
+        "p95_nearest_rank": 41.565,
+        "min": 7.712,
+        "max": 41.565
+      }
+    },
+    "warmup_failures": [],
+    "samples": [
+      {
+        "prompt_index": 1,
+        "run_index": 1,
+        "request_id": null,
+        "http_status": 500,
+        "cache": null,
+        "status": "failure",
+        "latency_ms": 41.565,
+        "error": "{\"detail\":\"ModelUnavailable: Model runtime is uninitialized. Weights must be loaded before inference.\"}"
+      },
+      {
+        "prompt_index": 2,
+        "run_index": 1,
+        "request_id": null,
+        "http_status": 500,
+        "cache": null,
+        "status": "failure",
+        "latency_ms": 7.712,
+        "error": "{\"detail\":\"ModelUnavailable: Model runtime is uninitialized. Weights must be loaded before inference.\"}"
+      },
+      {
+        "prompt_index": 3,
+        "run_index": 1,
+        "request_id": null,
+        "http_status": 500,
+        "cache": null,
+        "status": "failure",
+        "latency_ms": 8.35,
+        "error": "{\"detail\":\"ModelUnavailable: Model runtime is uninitialized. Weights must be loaded before inference.\"}"
+      },
+      {
+        "prompt_index": 4,
+        "run_index": 1,
+        "request_id": null,
+        "http_status": 500,
+        "cache": null,
+        "status": "failure",
+        "latency_ms": 8.331,
+        "error": "{\"detail\":\"ModelUnavailable: Model runtime is uninitialized. Weights must be loaded before inference.\"}"
+      },
+      {
+        "prompt_index": 5,
+        "run_index": 1,
+        "request_id": null,
+        "http_status": 500,
+        "cache": null,
+        "status": "failure",
+        "latency_ms": 9.705,
+        "error": "{\"detail\":\"ModelUnavailable: Model runtime is uninitialized. Weights must be loaded before inference.\"}"
+      }
+    ],
+    "prompts": [
+      {
+        "prompt_index": 1,
+        "base_prompt": "What is the capital of France?",
+        "request_prompt": "What is the capital of France?\nBenchmark sample measured-1-7060c5ec530141cdb3da65281be1e138"
+      },
+      {
+        "prompt_index": 2,
+        "base_prompt": "Summarize in one sentence: AI is changing software development.",
+        "request_prompt": "Summarize in one sentence: AI is changing software development.\nBenchmark sample measured-1-f3dc19c8e66841988838dedb4aa24b96"
+      },
+      {
+        "prompt_index": 3,
+        "base_prompt": "Write a short greeting for a new teammate.",
+        "request_prompt": "Write a short greeting for a new teammate.\nBenchmark sample measured-1-104a23e9b1f2488e95d397ecd30a10a9"
+      },
+      {
+        "prompt_index": 4,
+        "base_prompt": "List three benefits of distributed memory for LLM systems.",
+        "request_prompt": "List three benefits of distributed memory for LLM systems.\nBenchmark sample measured-1-42bfa665fb3449b395de805d3e7aad01"
+      },
+      {
+        "prompt_index": 5,
+        "base_prompt": "Explain caching in one paragraph.",
+        "request_prompt": "Explain caching in one paragraph.\nBenchmark sample measured-1-84d40c1b50cb4dd8868fb230d00a32d5"
+      }
+    ]
+  },
+  "model_generation": {
+    "status": "blocked",
+    "blocked_reason": "ModelNotReadyError: adapter did not load a model; configure LLM_MODEL_PATH or pass --model-path.",
+    "warmup_failures": [],
+    "samples": [],
+    "summary": {
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate_percent": null,
+      "latency_ms": {
+        "mean": null,
+        "median": null,
+        "p95_nearest_rank": null,
+        "min": null,
+        "max": null
+      }
+    },
+    "model_load_seconds_excluded_from_generation": 0.001
+  },
+  "finished_at_utc": "2026-11-16T14:59:11.969604+00:00"
+}

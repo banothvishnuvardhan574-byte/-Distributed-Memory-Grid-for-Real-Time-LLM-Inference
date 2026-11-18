@@ -9,11 +9,14 @@ import {
   ContentCopyOutlined,
   DescriptionOutlined,
   ErrorOutlined,
+  KeyOutlined,
   LightbulbOutlined,
   SendRounded,
   SettingsOutlined,
   TimelineOutlined,
   ViewInArOutlined,
+  VisibilityOffOutlined,
+  VisibilityOutlined,
 } from '@mui/icons-material';
 import './App.css';
 
@@ -482,6 +485,11 @@ export default function App() {
   const [gridStats, setGridStats] = useState(null);
   const [gridConfig, setGridConfig] = useState(null);
   const [backend, setBackend] = useState('Checking API');
+  const [apiKey, setApiKey] = useState('');
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
   const refreshBackend = useCallback(async () => {
     try {
@@ -550,19 +558,72 @@ export default function App() {
     };
   }, []);
 
+  const handleDisconnect = useCallback(() => {
+    setApiKey('');
+    setIsAuthorized(false);
+    setAuthError(null);
+  }, []);
+
+  const handleVerify = useCallback(async () => {
+    const key = apiKey.trim();
+    if (!key || isVerifying) return;
+    setIsVerifying(true);
+    setAuthError(null);
+    try {
+      const response = await fetch(`${API_URL}/api/prompt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': key,
+        },
+        body: JSON.stringify({ prompt: 'ping' }),
+      });
+      if (response.status === 401 || response.status === 403) {
+        setIsAuthorized(false);
+        setAuthError(await readError(response));
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(await readError(response));
+      }
+      setIsAuthorized(true);
+      setAuthError(null);
+      refreshBackend();
+    } catch (err) {
+      setIsAuthorized(false);
+      const message =
+        err?.name === 'TypeError' && /fetch|NetworkError/i.test(err.message || '')
+          ? `Backend API is unreachable at ${API_URL || 'the configured API proxy'}/api/prompt. Ensure the FastAPI backend server is running, or verify your network connection.`
+          : err.message || 'Verification failed. Please check the API key and try again.';
+      setAuthError(message);
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [apiKey, isVerifying, refreshBackend]);
+
   const handleSubmit = useCallback(async () => {
     const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt || isLoading) return;
+    const trimmedKey = apiKey.trim();
+    if (!trimmedPrompt || !trimmedKey || isLoading) return;
     setIsLoading(true);
     setError(null);
     const startTime = performance.now();
     try {
       const response = await fetch(`${API_URL}/api/prompt`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': trimmedKey,
+        },
         body: JSON.stringify({ prompt: trimmedPrompt }),
       });
       const latency = Math.round(performance.now() - startTime);
+      if (response.status === 401 || response.status === 403) {
+        setIsAuthorized(false);
+        const authMsg = await readError(response);
+        setAuthError(authMsg);
+        throw new Error(`Authentication failed (${response.status}): ${authMsg}`);
+      }
       if (!response.ok) throw new Error(await readError(response));
       let data;
       try {
@@ -577,6 +638,8 @@ export default function App() {
       if (data.error && !data.response) {
         throw new Error(String(data.error));
       }
+      setIsAuthorized(true);
+      setAuthError(null);
       const enriched = { ...data, latency, timestamp: new Date().toLocaleTimeString() };
       setResponseData(enriched);
       setRequestHistory((previous) => [
@@ -600,7 +663,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, prompt, refreshBackend]);
+  }, [apiKey, isLoading, prompt, refreshBackend]);
 
   const charCount = prompt.length;
   const wordCount = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
@@ -705,10 +768,98 @@ export default function App() {
 
           <section id="prompt" className="composer card">
             <div className="composer-title">
-              <ChatBubbleOutlined />
-              <h2>Prompt Input</h2>
+              <div className="composer-heading">
+                <ChatBubbleOutlined />
+                <h2>Prompt Input</h2>
+              </div>
               <small>Ctrl + Enter to submit</small>
             </div>
+
+            <div className="api-key-section" aria-label="API key authentication">
+              <div className="api-key-header">
+                <div className="api-key-label">
+                  <KeyOutlined fontSize="small" />
+                  <span>API Key</span>
+                </div>
+                <div className="api-key-status">
+                  {isAuthorized ? (
+                    <span className="auth-badge authorized">
+                      <CheckCircleOutlined fontSize="inherit" /> Authorized
+                    </span>
+                  ) : (
+                    <span className="auth-badge required">Key required</span>
+                  )}
+                </div>
+              </div>
+              <div className="api-key-input-row">
+                <div className="api-key-input-wrapper">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={(event) => {
+                      setApiKey(event.target.value);
+                      setIsAuthorized(false);
+                      setAuthError(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleVerify();
+                      }
+                    }}
+                    placeholder="Enter X-API-Key to authenticate..."
+                    disabled={isVerifying || isLoading}
+                    aria-label="API Key"
+                    autoComplete="off"
+                    spellCheck="false"
+                  />
+                  {apiKey && (
+                    <button
+                      type="button"
+                      className="api-key-toggle-btn"
+                      onClick={() => setShowApiKey((previous) => !previous)}
+                      aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
+                      title={showApiKey ? 'Hide API key' : 'Show API key'}
+                    >
+                      {showApiKey ? (
+                        <VisibilityOffOutlined fontSize="small" />
+                      ) : (
+                        <VisibilityOutlined fontSize="small" />
+                      )}
+                    </button>
+                  )}
+                </div>
+                <div className="api-key-actions">
+                  <button
+                    type="button"
+                    className="api-key-btn connect-btn"
+                    onClick={handleVerify}
+                    disabled={!apiKey.trim() || isVerifying || isLoading}
+                    aria-label={isVerifying ? 'Verifying API key' : 'Connect and verify API key'}
+                  >
+                    {isVerifying ? <span className="auth-spinner" /> : 'Connect'}
+                  </button>
+                  {apiKey && (
+                    <button
+                      type="button"
+                      className="api-key-btn disconnect-btn"
+                      onClick={handleDisconnect}
+                      disabled={isVerifying || isLoading}
+                      aria-label="Disconnect API key"
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </div>
+              </div>
+              {authError && (
+                <div className="api-key-error" role="alert">
+                  <ErrorOutlined fontSize="small" />
+                  <span>{authError}</span>
+                </div>
+              )}
+            </div>
+
             <textarea
               value={prompt}
               maxLength={4000}
@@ -719,8 +870,8 @@ export default function App() {
                   handleSubmit();
                 }
               }}
-              placeholder="Ask something about the memory grid..."
-              disabled={isLoading}
+              placeholder={apiKey.trim() ? "Ask something about the memory grid..." : "Enter and connect your API key above to submit prompts..."}
+              disabled={isLoading || !apiKey.trim()}
               aria-label="Prompt input"
               aria-describedby="prompt-character-count"
             />
@@ -735,8 +886,9 @@ export default function App() {
                 className="submit"
                 type="button"
                 onClick={handleSubmit}
-                disabled={isLoading || !prompt.trim()}
+                disabled={isLoading || !prompt.trim() || !apiKey.trim()}
                 aria-label={isLoading ? 'Submitting prompt' : 'Submit prompt'}
+                title={!apiKey.trim() ? 'API key required to submit' : 'Submit prompt'}
               >
                 {isLoading ? <span className="spinner" /> : <SendRounded />}
               </button>
@@ -744,7 +896,14 @@ export default function App() {
             <div className="quick">
               <b>Quick prompts:</b>
               {QUICK_PROMPTS.map((quick) => (
-                <button type="button" onClick={() => { setPrompt(quick); document.querySelector('.composer textarea')?.focus(); }} key={quick}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrompt(quick);
+                    document.querySelector('.composer textarea')?.focus();
+                  }}
+                  key={quick}
+                >
                   {quick}
                 </button>
               ))}

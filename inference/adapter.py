@@ -1,11 +1,4 @@
-"""
-LLM MemoryGrid — Inference Adapter
-Owner: Suraj Kotrange (suraj-inference)
-Contract Hand-off: generate_response(prompt: str) -> str
-"""
-
 import os
-import sys
 import time
 import logging
 import json
@@ -24,17 +17,21 @@ from inference.exceptions import (
 logger = logging.getLogger("inference_adapter")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
+ feat/recent-prompt-history-pagination
 _AUTO_CONFIGURE = object()
 
 
-class InferenceAdapter:
-    """
-    Encapsulates local LLM loading and bounded text generation.
-    Maintains a persistent instance to prevent reloading model weights per request.
-    """
+DEFAULT_MODEL_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "models",
+    "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+)
+ main
 
+class InferenceAdapter:
     _instance: Optional["InferenceAdapter"] = None
 
+ feat/recent-prompt-history-pagination
     def __init__(self, model_path: Optional[str] | object = _AUTO_CONFIGURE, n_threads: int = 2):
         if model_path is _AUTO_CONFIGURE:
             configured_path = os.getenv("LLM_MODEL_PATH")
@@ -50,6 +47,10 @@ class InferenceAdapter:
                 self.model_path = str(candidates[0]) if candidates else None
             else:
                 self.model_path = None
+                
+    def __init__(self, model_path: Optional[str] = None, n_threads: int = 2):
+        self.model_path = model_path or os.getenv("LLM_MODEL_PATH", DEFAULT_MODEL_PATH)
+ main
         self.n_threads = n_threads
         self.is_loaded = False
         self._model = None
@@ -68,17 +69,22 @@ class InferenceAdapter:
         else:
             logger.warning(
                 f"Model file not found at '{self.model_path}'. "
-                "Adapter ready in uninitialized state. Call load_model() with valid path."
+                "Adapter ready in uninitialized state."
             )
 
     @classmethod
+ feat/recent-prompt-history-pagination
     def get_instance(cls, model_path: Optional[str] | object = _AUTO_CONFIGURE) -> "InferenceAdapter":
         """Singleton accessor to ensure weights stay cached in memory."""
+
+    def get_instance(cls, model_path: Optional[str] = None) -> "InferenceAdapter":
+ main
         if cls._instance is None:
             cls._instance = cls(model_path=model_path)
         return cls._instance
 
     def _load_model(self) -> None:
+ feat/recent-prompt-history-pagination
         """Load a local GGUF with llama.cpp, with Ollama as a fallback runtime."""
         start_time = time.time()
         llama_error = None
@@ -126,6 +132,18 @@ class InferenceAdapter:
 
             self._model = "ollama"
             self._inference_backend = "ollama"
+
+        start_time = time.time()
+        logger.info(f"Loading weights from {self.model_path} onto CPU...")
+        try:
+            from llama_cpp import Llama
+            self._model = Llama(
+                model_path=self.model_path,
+                n_threads=self.n_threads,
+                n_ctx=1024,
+                verbose=False,
+            )
+ main
             self.is_loaded = True
             load_duration = time.time() - start_time
             logger.info(
@@ -134,6 +152,7 @@ class InferenceAdapter:
                 load_duration,
             )
             self.model_metadata["load_time_sec"] = round(load_duration, 3)
+ feat/recent-prompt-history-pagination
             return
         except ModelNotReadyError:
             raise
@@ -143,17 +162,19 @@ class InferenceAdapter:
                 f"Model runtime is unavailable. llama.cpp error: {detail}"
             ) from exc
 
+        except Exception as e:
+            self.is_loaded = False
+            self._model = None
+            raise ModelNotReadyError(f"Failed to load model weights: {str(e)}") from e
+ main
+
     def generate(
         self,
         prompt: str,
-        max_new_tokens: int = 128,
+        max_new_tokens: int = 64,
         timeout_sec: float = 15.0,
         temperature: float = 0.7,
     ) -> str:
-        """
-        Executes bounded text inference.
-        Enforces timeout, input validation, and genuine completion.
-        """
         if prompt is None or not isinstance(prompt, str) or not prompt.strip():
             raise InvalidPromptError("Prompt must be a non-empty string.")
 
@@ -166,40 +187,12 @@ class InferenceAdapter:
         logger.info(f"Generating inference for prompt (chars={len(prompt)}, max_tokens={max_new_tokens})...")
 
         try:
-            if self._model != "ollama" and self._inference_backend == "ollama":
-                self._inference_backend = "llama"
-
-            if self._inference_backend == "ollama":
-                payload = json.dumps({
-                    "model": self._ollama_model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "num_predict": max_new_tokens,
-                        "temperature": temperature,
-                    },
-                }).encode("utf-8")
-                api_request = urllib_request.Request(
-                    f"{self._ollama_url}/api/generate",
-                    data=payload,
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib_request.urlopen(
-                    api_request,
-                    timeout=timeout_sec,
-                ) as response:
-                    output = json.loads(response.read().decode("utf-8"))
-                generated_text = str(output.get("response", "")).strip()
-            else:
-                output = self._model(
-                    prompt,
-                    max_tokens=max_new_tokens,
-                    temperature=temperature,
-                    stop=["</s>", "<|im_end|>", "\n\nUser:"],
-                )
-                generated_text = output["choices"][0]["text"].strip()
-
+            output = self._model(
+                prompt,
+                max_tokens=max_new_tokens,
+                temperature=temperature,
+                stop=["</s>", "<|im_end|>", "\n\nUser:"],
+            )
             elapsed = time.time() - start_time
             if elapsed > timeout_sec:
                 raise InferenceTimeoutError(
@@ -215,15 +208,12 @@ class InferenceAdapter:
         except Exception as e:
             elapsed = time.time() - start_time
             if elapsed > timeout_sec:
-                raise InferenceTimeoutError(
-                    f"Inference timeout after {elapsed:.2f}s."
-                ) from e
+                raise InferenceTimeoutError(f"Inference timeout after {elapsed:.2f}s.") from e
             if isinstance(e, InferenceError):
                 raise
-            raise InferenceError(f"Generation failure during execution: {str(e)}") from e
+            raise InferenceError(f"Generation failure: {str(e)}") from e
 
 
-# Public Top-Level API Contract agreed with Vishnu and Nikhila
 _adapter_singleton: Optional[InferenceAdapter] = None
 
 def get_adapter() -> InferenceAdapter:
@@ -232,23 +222,6 @@ def get_adapter() -> InferenceAdapter:
         _adapter_singleton = InferenceAdapter.get_instance()
     return _adapter_singleton
 
-def generate_response(prompt: str, max_tokens: int = 128, timeout_sec: float = 15.0) -> str:
-    """
-    Public API contract for Nikhila's worker handler and Vishnu's backend.
-    
-    Args:
-        prompt: User input string.
-        max_tokens: Upper ceiling for generated tokens (default: 128).
-        timeout_sec: Maximum latency budget in seconds (default: 15.0).
-        
-    Returns:
-        Generated response string.
-        
-    Raises:
-        InvalidPromptError: If prompt is empty or malformed.
-        ModelNotReadyError: If model weights are not loaded.
-        InferenceTimeoutError: If execution exceeds timeout budget.
-        InferenceError: For internal runtime errors.
-    """
+def generate_response(prompt: str, max_tokens: int = 64, timeout_sec: float = 15.0) -> str:
     adapter = get_adapter()
     return adapter.generate(prompt=prompt, max_new_tokens=max_tokens, timeout_sec=timeout_sec)

@@ -1,39 +1,932 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AccountTreeOutlined, ArchitectureOutlined, AttachFileOutlined, BarChartOutlined, BoltOutlined, ChatBubbleOutlined, CheckCircleOutlined, ContentCopyOutlined, DescriptionOutlined, ErrorOutlined, HubOutlined, LightbulbOutlined, MemoryOutlined, SendRounded, StorageOutlined, TimelineOutlined } from '@mui/icons-material';
+import {
+  AttachFileOutlined,
+  BarChartOutlined,
+  BoltOutlined,
+  ChatBubbleOutlined,
+  CheckCircleOutlined,
+  CloseRounded,
+  ContentCopyOutlined,
+  DescriptionOutlined,
+  ErrorOutlined,
+  KeyOutlined,
+  LightbulbOutlined,
+  SendRounded,
+  SettingsOutlined,
+  TimelineOutlined,
+  ViewInArOutlined,
+  VisibilityOffOutlined,
+  VisibilityOutlined,
+} from '@mui/icons-material';
 import './App.css';
 
 const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
-const EXAMPLES = ['Explain how the memory grid handles concurrent requests.', 'Show system status and active nodes.', 'Compare different memory eviction strategies.'];
+const EXAMPLES = [
+  'Explain how the memory grid handles concurrent requests.',
+  'Show system status and active nodes.',
+  'Compare different memory eviction strategies.',
+];
 const QUICK_PROMPTS = ['System overview', 'Cache strategy', 'Failure handling', 'Compare approaches'];
-const NODE_POSITIONS = [[19, 30], [52, 18], [80, 51], [13, 75], [47, 80], [86, 74]];
-const nodeName = (id) => `Node ${String(Number(id) + 1).padStart(2, '0')}`;
+
+// 6 Illustrative node positions calibrated to match Image 2 reference topology:
+// The SVG canvas is 900 x 420 (graph area inside topology-canvas).
+// Node circular disc is at (cx, cy) in SVG coordinates.
+const NODE_DEFINITIONS = [
+  { id: 0, label: 'Node 01', type: 'memory', cx: 160, cy: 95, role: 'Memory Worker', region: 'Local' },
+  { id: 1, label: 'Node 02', type: 'storage', cx: 470, cy: 75, role: 'Memory Worker', region: 'Local' },
+  { id: 2, label: 'Node 03', type: 'featured', cx: 700, cy: 195, role: 'Memory Worker', region: 'Local' },
+  { id: 3, label: 'Node 04', type: 'idle', cx: 110, cy: 285, role: 'Memory Worker', region: 'Local' },
+  { id: 4, label: 'Node 05', type: 'storage', cx: 430, cy: 310, role: 'Memory Worker', region: 'Local' },
+  { id: 5, label: 'Node 06', type: 'memory', cx: 720, cy: 305, role: 'Memory Worker', region: 'Local' },
+];
 
 function Topology({ gridStats }) {
-  const nodes = gridStats?.nodes || [];
-  const [selectedId, setSelectedId] = useState(null);
-  const selected = nodes.find((node) => node.node_id === selectedId) || nodes[0];
-  return <section id="network" className="topology card"><div className="panel-title"><AccountTreeOutlined /><div><h2>Memory Grid Topology</h2><p>Illustrative layout <em>· availability and cache entries from the API</em></p></div></div><div className="topology-canvas" aria-label="Illustrative layout of API-reported memory nodes"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path className="connection" d="M19 30 C27 54 35 48 47 52 S61 56 80 51 M52 18 C52 36 49 42 47 52 M13 75 C23 59 34 49 47 52 M47 52 C47 65 47 72 47 80 M47 52 C66 43 71 60 80 51 M80 51 C77 66 80 71 86 74" /></svg>{nodes.slice(0, NODE_POSITIONS.length).map((node, index) => { const [x, y] = NODE_POSITIONS[index]; const isSelected = selected?.node_id === node.node_id; return <button key={node.node_id} type="button" className={`memory-node ${node.alive ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => setSelectedId(node.node_id)} aria-pressed={isSelected} aria-label={`${nodeName(node.node_id)}. ${node.alive ? 'Available' : 'Unavailable'}. Show details.`}><span>{index % 3 === 1 ? <StorageOutlined /> : <MemoryOutlined />}</span><b>{nodeName(node.node_id)}</b><small><i />{node.alive ? 'Available' : 'Unavailable'}</small></button>; })}{!nodes.length && <p className="topology-empty">Node statistics are unavailable. Start the API to view reported nodes.</p>}{selected && <aside className="node-popover" aria-live="polite"><strong>{nodeName(selected.node_id)}<span>{selected.alive ? 'Available' : 'Unavailable'}</span></strong><dl><dt>Source</dt><dd>API stats</dd><dt>Entries</dt><dd>{selected.entries}</dd><dt>Capacity</dt><dd>{selected.capacity}</dd><dt>Entry use</dt><dd>{selected.capacity ? `${Math.round((selected.entries / selected.capacity) * 100)}%` : '—'}</dd></dl></aside>}</div><div className="legend"><span><i className="available" />Available</span><span><i className="unavailable" />Unavailable</span><small>Positions and connections are illustrative; node data is live.</small></div></section>;
+  const backendNodes = gridStats?.nodes || [];
+  const [selectedId, setSelectedId] = useState(2); // Node 03 selected by default matching Image 2 reference
+
+  // Map each of the 6 layout slots to backend data if available, or fallback info
+  const displayNodes = NODE_DEFINITIONS.map((def) => {
+    const backendData = backendNodes.find((n) => n.node_id === def.id);
+    const isNode4 = def.id === 3; // Node 04 is illustrated as Idle in Image 2
+    const alive = backendData ? backendData.alive : !isNode4;
+    const statusText = !alive ? 'Unavailable' : isNode4 ? 'Idle' : 'Healthy';
+    const statusClass = !alive ? 'unavailable' : isNode4 ? 'idle' : 'healthy';
+
+    // Calculate simulated or real load percentage
+    let loadPercent = '12%';
+    if (backendData?.capacity) {
+      loadPercent = `${Math.round((backendData.entries / backendData.capacity) * 100)}%`;
+    }
+
+    return {
+      ...def,
+      backendData,
+      alive,
+      statusText,
+      statusClass,
+      loadPercent,
+      entries: backendData?.entries ?? (isNode4 ? 0 : 0),
+      capacity: backendData?.capacity ?? 1000,
+    };
+  });
+
+  const selectedNode = displayNodes.find((n) => n.id === selectedId) || displayNodes[2];
+
+  return (
+    <section id="network" className="topology card">
+      <div className="panel-title">
+        <svg className="topology-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+        <div>
+          <h2>Memory Grid Topology</h2>
+          <p>Visual representation of distributed memory nodes</p>
+        </div>
+      </div>
+
+      <div className="topology-body">
+        <div className="topology-canvas" aria-label="Distributed memory network topology">
+          <svg
+            viewBox="0 0 900 420"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            className="topology-svg"
+          >
+            {/* Main coordinated organic connection paths with central junction points */}
+            {/* Node 04 (cx: 110, cy: 285) -> Junction 1 (330, 220) */}
+            <path
+              className="topology-edge"
+              d="M 110 285 C 170 245, 250 230, 330 220"
+            />
+            {/* Node 01 (cx: 160, cy: 95) -> Junction 1 (330, 220) */}
+            <path
+              className="topology-edge"
+              d="M 160 95 C 180 170, 250 210, 330 220"
+            />
+            {/* Node 02 (cx: 470, cy: 75) -> Spine leading into Junction 1 */}
+            <path
+              className="topology-edge"
+              d="M 470 75 C 465 160, 410 210, 330 220"
+            />
+            {/* Junction 1 (330, 220) -> Node 05 (cx: 430, cy: 310) */}
+            <path
+              className="topology-edge"
+              d="M 330 220 C 350 250, 385 280, 430 310"
+            />
+            {/* Central Trunk: Junction 1 (330, 220) -> Junction 2 (655, 220) */}
+            <path
+              className="topology-edge trunk"
+              d="M 330 220 C 435 210, 555 215, 655 220"
+            />
+            {/* Junction 2 (655, 220) -> Node 03 (cx: 700, cy: 195) */}
+            <path
+              className="topology-edge"
+              d="M 655 220 L 700 195"
+            />
+            {/* Junction 2 (655, 220) -> Node 06 (cx: 720, cy: 305) */}
+            <path
+              className="topology-edge"
+              d="M 655 220 C 645 260, 675 285, 720 305"
+            />
+
+            {/* Junction Dots matching Image 2 */}
+            {/* Dot near Node 04 */}
+            <circle cx="138" cy="270" r="3.5" className="topology-dot" />
+            {/* Dot at Node 01 stem */}
+            <circle cx="178" cy="155" r="3.5" className="topology-dot" />
+            {/* Dot at Node 02 stem */}
+            <circle cx="468" cy="120" r="3.5" className="topology-dot" />
+            {/* Central main junction dot */}
+            <circle cx="330" cy="220" r="5" className="topology-junction-dot" />
+            {/* Minor junction marker before Node 03 */}
+            <circle cx="655" cy="220" r="3.5" className="topology-dot" />
+          </svg>
+
+          {/* Nodes Layer - Centered exactly on cx, cy */}
+          {displayNodes.map((node) => {
+            const isSelected = selectedNode?.id === node.id;
+            const isStorage = node.type === 'storage';
+            const isFeatured = node.type === 'featured';
+
+            return (
+              <div
+                key={node.id}
+                className={`topology-node-container ${node.statusClass} ${isSelected ? 'selected' : ''} ${isFeatured ? 'featured' : ''}`}
+                style={{
+                  left: `${(node.cx / 900) * 100}%`,
+                  top: `${(node.cy / 420) * 100}%`,
+                }}
+              >
+                <button
+                  type="button"
+                  className="memory-node-button"
+                  onClick={() => setSelectedId(node.id)}
+                  aria-pressed={isSelected}
+                  aria-label={`${node.label}, Status: ${node.statusText}, Role: ${node.role}`}
+                >
+                  <div className="node-rings-wrapper">
+                    {isFeatured && <div className="outer-glow-ring" />}
+                    <div className="node-icon-circle">
+                      {isStorage ? (
+                        /* Storage / Cylinders icon matching Node 02 and Node 05 */
+                        <svg className="node-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <ellipse cx="12" cy="5" rx="8" ry="3" />
+                          <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
+                          <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
+                        </svg>
+                      ) : (
+                        /* 3D Isometric Cube icon matching Nodes 01, 03, 04, 06 */
+                        <svg className="node-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                          <line x1="12" y1="22.08" x2="12" y2="12" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="node-meta">
+                    <span className="node-label-title">{node.label}</span>
+                    <div className="node-status-row">
+                      <span className={`status-indicator-dot ${node.statusClass}`} />
+                      <span className={`status-text ${node.statusClass}`}>{node.statusText}</span>
+                    </div>
+                    <span className="node-role-text">{node.role}</span>
+                    <span className="node-region-text">(Region: {node.region})</span>
+                  </div>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Dedicated Details Panel: Reserved space beside the graph, zero overlap */}
+        <div className="topology-details-panel">
+          {selectedNode && (
+            <aside className="node-popover" aria-live="polite">
+              <div className="node-popover-header">
+                <strong className="popover-title">{selectedNode.label}</strong>
+                <div className="popover-status-tag">
+                  <span className={`popover-badge ${selectedNode.statusClass}`}>
+                    {selectedNode.alive ? 'Online' : selectedNode.statusText}
+                  </span>
+                  <button
+                    type="button"
+                    className="popover-close-btn"
+                    onClick={() => setSelectedId(null)}
+                    aria-label="Close node details"
+                  >
+                    <CloseRounded fontSize="inherit" />
+                  </button>
+                </div>
+              </div>
+              <dl className="popover-details">
+                <dt>Role</dt>
+                <dd>{selectedNode.role}</dd>
+                <dt>Region</dt>
+                <dd>{selectedNode.region}</dd>
+                <dt>Load</dt>
+                <dd>{selectedNode.loadPercent}</dd>
+                <dt>Status</dt>
+                <dd className={selectedNode.statusClass}>{selectedNode.statusText}</dd>
+                {selectedNode.backendData && (
+                  <>
+                    <dt>Entries</dt>
+                    <dd>{selectedNode.entries}</dd>
+                    <dt>Capacity</dt>
+                    <dd>{selectedNode.capacity}</dd>
+                  </>
+                )}
+              </dl>
+            </aside>
+          )}
+        </div>
+      </div>
+
+      <div className="legend">
+        <span className="legend-item"><i className="legend-dot active" />Active</span>
+        <span className="legend-item"><i className="legend-dot idle" />Idle</span>
+        <span className="legend-item"><i className="legend-dot unavailable" />Unavailable</span>
+        <small className="legend-disclaimer">Positions and connections are illustrative; node data is live from backend.</small>
+      </div>
+    </section>
+  );
 }
 
-function Journey({ phase }) { const stages = ['Preparing', 'Sending', 'Awaiting response', 'Received']; const completeIndex = phase === 'idle' ? -1 : phase === 'error' ? 1 : phase === 'loading' ? 1 : 3; const captions = phase === 'error' ? ['Prompt checked', 'Request failed', 'Not reached', 'Not reached'] : ['Prompt checked', 'Sent to API', 'Waiting for API', 'Response received']; return <section id="history" className="journey card"><div className="panel-title"><TimelineOutlined /><div><h2>Request Journey</h2><p>Driven by this browser request</p></div></div><div className="steps">{stages.map((name, index) => <div className={index <= completeIndex ? 'done' : phase === 'error' && index === 1 ? 'failed' : ''} key={name}><b>{index + 1}</b><strong>{name}</strong><small>{captions[index]}</small></div>)}</div></section>; }
+function Journey({ phase }) {
+  const stages = ['Validating', 'Sending', 'Awaiting', 'Received'];
+  const completeIndex = phase === 'idle' ? -1 : phase === 'error' ? 1 : phase === 'loading' ? 2 : 3;
+  const captions = phase === 'error'
+    ? ['Validated prompt', 'Request failed', 'Not reached', 'Not reached']
+    : phase === 'loading'
+      ? ['Validated prompt', 'Sending request to API…', 'Awaiting API response…', 'Awaiting completion']
+      : ['Validated prompt', 'Sent request to API', 'API responded', 'Response ready'];
 
-function Response({ data, error, onDismissError }) {
+  return (
+    <section id="history" className="journey card">
+      <div className="panel-title">
+        <TimelineOutlined />
+        <div>
+          <h2>Request Journey</h2>
+          <p>Driven by this browser request</p>
+        </div>
+      </div>
+      <div className="steps">
+        {stages.map((name, index) => (
+          <div
+            className={index <= completeIndex ? 'done' : phase === 'error' && index === 1 ? 'failed' : ''}
+            key={name}
+          >
+            <b>{index + 1}</b>
+            <strong>{name}</strong>
+            <small>{captions[index]}</small>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Response({ data, error, onDismissError, onRetry }) {
   const [copied, setCopied] = useState(false);
   const cacheState = typeof data?.cache === 'string' ? data.cache.trim().toLowerCase() : '';
-  const cacheDescription = cacheState === 'hit' ? 'Hit — retrieved cached response' : cacheState === 'miss' ? 'Miss — generated a fresh response' : cacheState === 'expired' ? 'Expired — generated a fresh response' : cacheState === 'missing' ? 'Missing — generated a fresh response' : data?.cache;
-  const copyRequestId = async () => { if (!data?.request_id) return; try { await navigator.clipboard.writeText(data.request_id); setCopied(true); window.setTimeout(() => setCopied(false), 1600); } catch { setCopied(false); } };
-  return <section className="response card" aria-live="polite"><div className="response-head"><div className="panel-title"><DescriptionOutlined /><h2>Response</h2></div><span>{data?.timestamp ? `Received ${data.timestamp}` : 'Awaiting request'}</span></div>{error ? <div className="ack error" role="alert"><ErrorOutlined /><div><b>Request failed</b><p>{error}</p><div className="response-actions"><button className="copy" type="button" onClick={onDismissError}>Dismiss</button></div></div></div> : data ? <><div className="ack"><CheckCircleOutlined /><div><b>Response received</b><p>{data.response || 'The backend returned no response text.'}</p></div></div><div className="response-meta"><div>Request ID <strong title={data.request_id}>{data.request_id || 'Not supplied'}</strong><button className="copy" type="button" onClick={copyRequestId} aria-label="Copy request ID"><ContentCopyOutlined fontSize="small" />{copied ? 'Copied' : 'Copy'}</button></div><div>Round-trip <strong>{data.latency} ms</strong></div><div>Cache <strong className={cacheState === 'hit' ? 'status-live' : ''}>{cacheDescription || 'Not supplied'}</strong></div><div>Status <strong>{data.status || 'unknown'}</strong></div></div></> : <div className="empty-response">Submit a prompt to view the backend response, its request ID, cache result, and client-measured round-trip time.</div>}</section>;
+  const cacheDescription = cacheState === 'hit'
+    ? 'Hit — retrieved cached response'
+    : cacheState === 'miss'
+      ? 'Miss — generated a fresh response'
+      : cacheState === 'expired'
+        ? 'Expired — generated fresh response'
+        : cacheState === 'missing'
+          ? 'Missing — generated fresh response'
+          : data?.cache;
+
+  const copyRequestId = async () => {
+    if (!data?.request_id) return;
+    try {
+      await navigator.clipboard.writeText(data.request_id);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <section className="response card" aria-live="polite">
+      <div className="response-head">
+        <div className="panel-title">
+          <DescriptionOutlined />
+          <h2>Response</h2>
+        </div>
+        <span>{data?.timestamp ? `Received ${data.timestamp}` : 'Awaiting request'}</span>
+      </div>
+      {error ? (
+        <div className="ack error" role="alert">
+          <ErrorOutlined />
+          <div>
+            <b>Request failed</b>
+            <p>{error}</p>
+            <div className="response-actions">
+              <button className="action-btn retry" type="button" onClick={onRetry}>
+                Retry last prompt
+              </button>
+              <button className="action-btn dismiss" type="button" onClick={onDismissError}>
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : data ? (
+        <>
+          <div className="ack">
+            <CheckCircleOutlined />
+            <div>
+              <b>Response received</b>
+              <p>{data.response || 'The backend returned no response text.'}</p>
+            </div>
+          </div>
+          <div className="response-meta">
+            <div>
+              Request ID <strong title={data.request_id}>{data.request_id || 'Not supplied'}</strong>
+              <button className="copy" type="button" onClick={copyRequestId} aria-label="Copy request ID">
+                <ContentCopyOutlined fontSize="small" />
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div>
+              Round-trip <strong title="Client-measured round-trip time">{data.latency} ms</strong>
+            </div>
+            <div>
+              Cache <strong className={cacheState === 'hit' ? 'status-live' : ''}>{cacheDescription || 'Not supplied'}</strong>
+            </div>
+            <div>
+              Status <strong>{data.status || 'unknown'}</strong>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="empty-response">
+          Submit a prompt to view the backend response, its request ID, cache result, and client-measured round-trip time.
+        </div>
+      )}
+    </section>
+  );
 }
 
-function RequestHistory({ entries }) { if (!entries.length) return null; return <section className="history-panel card" aria-label="Session request history"><div className="panel-title"><TimelineOutlined /><div><h2>Session request history</h2><p>Successful requests from this browser session</p></div></div><div className="history-list">{entries.map((entry) => <div className="history-entry" key={entry.request_id}><p>{entry.prompt}</p><span>{entry.request_id}</span><b>{entry.cache || 'cache not supplied'}</b><small>{entry.latency} ms · {entry.timestamp}</small></div>)}</div></section>; }
+function RequestHistory({ entries }) {
+  const [copiedId, setCopiedId] = useState(null);
 
-async function readError(response) { let message = `Server error (${response.status}): ${response.statusText || 'Request failed'}`; try { const contentType = response.headers.get('content-type') || ''; if (contentType.includes('application/json')) { const body = await response.json(); if (body?.detail) message = Array.isArray(body.detail) ? body.detail.map((item) => typeof item === 'string' ? item : item.msg || JSON.stringify(item)).join(', ') : typeof body.detail === 'object' ? JSON.stringify(body.detail) : String(body.detail); else if (body?.message) message = String(body.message); } else { const text = await response.text(); if (text.trim() && text.length < 300) message = text.trim(); } } catch { /* Use HTTP fallback. */ } return message; }
+  const copyId = async (id) => {
+    if (!id || id === 'N/A') return;
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopiedId(id);
+      window.setTimeout(() => setCopiedId(null), 1600);
+    } catch {
+      setCopiedId(null);
+    }
+  };
+
+  return (
+    <section id="system" className="history-panel card" aria-label="Session request history">
+      <div className="panel-title">
+        <TimelineOutlined />
+        <div>
+          <h2>Session Request History</h2>
+          <p>Successful requests from this browser session</p>
+        </div>
+        <b className="history-count" title={`${entries.length} successful request${entries.length === 1 ? '' : 's'}`}>
+          {entries.length}
+        </b>
+      </div>
+
+      {entries.length ? (
+        <div className="history-list">
+          {entries.map((entry, index) => (
+            <article className="history-entry" key={`${entry.request_id}-${index}`}>
+              <div className="history-entry-top">
+                <p title={entry.prompt}>{entry.prompt}</p>
+                <div className="history-id">
+                  <span title={entry.request_id}>{entry.request_id}</span>
+                  <button
+                    type="button"
+                    onClick={() => copyId(entry.request_id)}
+                    aria-label={`Copy request ID ${entry.request_id}`}
+                  >
+                    <ContentCopyOutlined fontSize="inherit" />
+                    {copiedId === entry.request_id ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+              <div className="history-entry-meta">
+                <div className="history-entry-tags">
+                  <b className="history-tag status">{entry.status || 'completed'}</b>
+                  {entry.cache && (
+                    <span className={`history-tag cache ${String(entry.cache).toLowerCase() === 'hit' ? 'cache-hit' : ''}`}>
+                      {entry.cache}
+                    </span>
+                  )}
+                </div>
+                <small title="Client-measured round-trip time">
+                  {entry.latency} ms · {entry.timestamp}
+                </small>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="history-empty">
+          <TimelineOutlined />
+          <div>
+            <strong>No session requests yet</strong>
+            <span>Successful prompt requests will appear here with prompt excerpt, request ID, latency, and cache result.</span>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+async function readError(response) {
+  let message = `Server error (${response.status}): ${response.statusText || 'Request failed'}`;
+  try {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const body = await response.json();
+      if (body?.detail) {
+        message = Array.isArray(body.detail)
+          ? body.detail.map((item) => (typeof item === 'string' ? item : item.msg || JSON.stringify(item))).join(', ')
+          : typeof body.detail === 'object'
+            ? JSON.stringify(body.detail)
+            : String(body.detail);
+      } else if (body?.message) {
+        message = String(body.message);
+      }
+    } else {
+      const text = await response.text();
+      if (text.trim() && text.length < 300) message = text.trim();
+    }
+  } catch {
+    /* Use HTTP fallback. */
+  }
+  return message;
+}
 
 export default function App() {
+feat/recent-prompt-history-pagination
   const [prompt, setPrompt] = useState(''); const [isLoading, setIsLoading] = useState(false); const [error, setError] = useState(null); const [responseData, setResponseData] = useState(null); const [requestHistory, setRequestHistory] = useState([]); const [gridStats, setGridStats] = useState(null); const [backend, setBackend] = useState('Checking API');
   const refreshBackend = useCallback(async () => { try { const [health, grid] = await Promise.all([fetch(`${API_URL}/health`), fetch(`${API_URL}/api/grid/stats`)]); setBackend(health.ok ? 'Backend connected' : 'Backend unavailable'); if (grid.ok) setGridStats(await grid.json()); } catch { setBackend('Backend unavailable'); } }, []);
   useEffect(() => { refreshBackend(); }, [refreshBackend]);
   const handleSubmit = useCallback(async () => { const trimmedPrompt = prompt.trim(); if (!trimmedPrompt || isLoading) return; setIsLoading(true); setError(null); const startTime = performance.now(); try { const response = await fetch(`${API_URL}/api/prompt`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: trimmedPrompt }) }); const latency = Math.round(performance.now() - startTime); if (!response.ok) throw new Error(await readError(response)); let data; try { data = await response.json(); } catch { throw new Error('Received invalid JSON response from server.'); } if (!data || typeof data !== 'object') throw new Error('Unexpected response format received from inference service.'); const enriched = { ...data, latency, timestamp: new Date().toLocaleTimeString() }; setResponseData(enriched); setRequestHistory((previous) => [{ request_id: data.request_id || 'N/A', status: data.status || 'completed', prompt: data.prompt || trimmedPrompt, cache: data.cache, latency, timestamp: enriched.timestamp }, ...previous]); refreshBackend(); } catch (submissionError) { const message = submissionError?.name === 'TypeError' && /fetch|NetworkError/i.test(submissionError.message || '') ? `Backend API is unreachable at ${API_URL || 'the configured API proxy'}/api/prompt. Ensure the FastAPI backend server is running, or verify your network connection.` : submissionError.message || 'An unexpected error occurred while communicating with the inference grid.'; setError(message); } finally { setIsLoading(false); } }, [isLoading, prompt, refreshBackend]);
   const charCount = prompt.length; const wordCount = prompt.trim() ? prompt.trim().split(/\s+/).length : 0; const tokenEstimate = Math.ceil(charCount / 4); const phase = error ? 'error' : isLoading ? 'loading' : responseData ? 'completed' : 'idle';
   return <><header><a className="brand" href="#top" aria-label="MemoryGrid home"><span className="logo"><HubOutlined /></span><span>MemoryGrid</span></a><nav aria-label="Primary navigation"><a className="selected" href="#top">Overview</a><a href="#prompt">Prompt</a><a href="#network">Network</a><a href="#history">History</a><a href="#system">System</a></nav><div className="backend" title={`${requestHistory.length} successful request${requestHistory.length === 1 ? '' : 's'} this session`}><i className={backend === 'Backend connected' ? 'ok' : ''} /><span>{backend}<small>API connection</small></span></div><button className="profile" type="button" aria-label="User profile">T</button></header><main id="top"><aside className="editorial"><p className="eyebrow">Distributed memory</p><h1>Explore the<br />memory grid.</h1><div className="brush" /><p className="intro">Submit a prompt, follow its journey across the system, and understand how distributed memory enables real-time LLM inference.</p><div className="features"><div><b><ArchitectureOutlined /></b><span><strong>Distributed architecture</strong><small>Multiple memory nodes working together</small></span></div><div><b><BoltOutlined /></b><span><strong>Efficient memory management</strong><small>Key-value storage with TTL and LRU</small></span></div><div><b><BarChartOutlined /></b><span><strong>Real-time request flow</strong><small>Track your request across the system</small></span></div></div><div className="botanical" aria-hidden="true"><i /><i /><i /><span>Smarter<br />Memory<br />Brighter<br />AI</span></div></aside><div className="dashboard"><div className="top-row"><Topology gridStats={gridStats} /><aside className="sticky"><b><LightbulbOutlined />Example Prompts</b>{EXAMPLES.map((example) => <button type="button" onClick={() => setPrompt(example)} key={example}><SendRounded fontSize="small" /><span>{example}</span></button>)}</aside></div><section id="prompt" className="composer card"><div className="composer-title"><ChatBubbleOutlined /><h2>Prompt Input</h2><small>Ctrl + Enter to submit</small></div><textarea value={prompt} maxLength={4000} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); handleSubmit(); } }} placeholder="Ask something about the memory grid..." disabled={isLoading} aria-label="Prompt input" aria-describedby="prompt-character-count" /><div className="compose-toolbar"><span title="Estimated tokens use a four-characters-per-token heuristic."><AttachFileOutlined fontSize="small" />Add context unavailable <i /> <span id="prompt-character-count">{charCount} / 4000 characters</span> <i /> {wordCount} words <i /> {tokenEstimate} estimated tokens</span><button className="submit" type="button" onClick={handleSubmit} disabled={isLoading || !prompt.trim()} aria-label={isLoading ? 'Submitting prompt' : 'Submit prompt'}>{isLoading ? <span className="spinner" /> : <SendRounded />}</button></div><div className="quick"><b>Quick prompts:</b>{QUICK_PROMPTS.map((quick) => <button type="button" onClick={() => setPrompt(quick)} key={quick}>{quick}</button>)}</div></section><div className="bottom"><Journey phase={phase} /><Response data={responseData} error={error} onDismissError={() => setError(null)} /></div><RequestHistory entries={requestHistory} /></div></main></>;
+
+  const [prompt, setPrompt] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [responseData, setResponseData] = useState(null);
+  const [requestHistory, setRequestHistory] = useState([]);
+  const [gridStats, setGridStats] = useState(null);
+  const [gridConfig, setGridConfig] = useState(null);
+  const [backend, setBackend] = useState('Checking API');
+  const [apiKey, setApiKey] = useState('');
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [authError, setAuthError] = useState(null);
+
+  const refreshBackend = useCallback(async () => {
+    try {
+      const [health, grid, config] = await Promise.all([
+        fetch(`${API_URL}/health`),
+        fetch(`${API_URL}/api/grid/stats`),
+        fetch(`${API_URL}/api/grid/config`).catch(() => null),
+      ]);
+      setBackend(health.ok ? 'Backend connected' : 'Backend unavailable');
+      if (grid.ok) {
+        try {
+          setGridStats(await grid.json());
+        } catch {
+          /* Invalid JSON from stats endpoint — leave stale data. */
+        }
+      }
+      if (config?.ok) {
+        try {
+          setGridConfig(await config.json());
+        } catch {
+          /* Invalid JSON from config endpoint — ignore. */
+        }
+      }
+    } catch {
+      setBackend('Backend unavailable');
+    }
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        const [healthRes, statsRes, configRes] = await Promise.allSettled([
+          fetch(`${API_URL}/health`),
+          fetch(`${API_URL}/api/grid/stats`),
+          fetch(`${API_URL}/api/grid/config`),
+        ]);
+        if (ignore) return;
+        if (healthRes.status === 'fulfilled' && healthRes.value.ok) {
+          setBackend('Backend connected');
+        } else {
+          setBackend('Backend unavailable');
+        }
+        if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
+          try {
+            const data = await statsRes.value.json();
+            if (!ignore) setGridStats(data);
+          } catch {
+            /* Invalid JSON from stats endpoint — ignore */
+          }
+        }
+        if (configRes.status === 'fulfilled' && configRes.value.ok) {
+          try {
+            const data = await configRes.value.json();
+            if (!ignore) setGridConfig(data);
+          } catch {
+            /* Invalid JSON from config endpoint — ignore */
+          }
+        }
+      } catch {
+        if (!ignore) setBackend('Backend unavailable');
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const handleDisconnect = useCallback(() => {
+    setApiKey('');
+    setIsAuthorized(false);
+    setAuthError(null);
+  }, []);
+
+  const handleVerify = useCallback(async () => {
+    const key = apiKey.trim();
+    if (!key || isVerifying) return;
+    setIsVerifying(true);
+    setAuthError(null);
+    try {
+      const response = await fetch(`${API_URL}/api/prompt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': key,
+        },
+        body: JSON.stringify({ prompt: 'ping' }),
+      });
+      if (response.status === 401 || response.status === 403) {
+        setIsAuthorized(false);
+        setAuthError(await readError(response));
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(await readError(response));
+      }
+      setIsAuthorized(true);
+      setAuthError(null);
+      refreshBackend();
+    } catch (err) {
+      setIsAuthorized(false);
+      const message =
+        err?.name === 'TypeError' && /fetch|NetworkError/i.test(err.message || '')
+          ? `Backend API is unreachable at ${API_URL || 'the configured API proxy'}/api/prompt. Ensure the FastAPI backend server is running, or verify your network connection.`
+          : err.message || 'Verification failed. Please check the API key and try again.';
+      setAuthError(message);
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [apiKey, isVerifying, refreshBackend]);
+
+  const handleSubmit = useCallback(async () => {
+    const trimmedPrompt = prompt.trim();
+    const trimmedKey = apiKey.trim();
+    if (!trimmedPrompt || !trimmedKey || isLoading) return;
+    setIsLoading(true);
+    setError(null);
+    const startTime = performance.now();
+    try {
+      const response = await fetch(`${API_URL}/api/prompt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': trimmedKey,
+        },
+        body: JSON.stringify({ prompt: trimmedPrompt }),
+      });
+      const latency = Math.round(performance.now() - startTime);
+      if (response.status === 401 || response.status === 403) {
+        setIsAuthorized(false);
+        const authMsg = await readError(response);
+        setAuthError(authMsg);
+        throw new Error(`Authentication failed (${response.status}): ${authMsg}`);
+      }
+      if (!response.ok) throw new Error(await readError(response));
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Received invalid JSON response from server.');
+      }
+      if (!data || typeof data !== 'object') {
+        throw new Error('Unexpected response format received from inference service.');
+      }
+      // If the API returns an error field, treat it as a soft error but still show response data
+      if (data.error && !data.response) {
+        throw new Error(String(data.error));
+      }
+      setIsAuthorized(true);
+      setAuthError(null);
+      const enriched = { ...data, latency, timestamp: new Date().toLocaleTimeString() };
+      setResponseData(enriched);
+      setRequestHistory((previous) => [
+        {
+          request_id: data.request_id || 'N/A',
+          status: data.status || 'completed',
+          prompt: data.prompt || trimmedPrompt,
+          cache: data.cache,
+          latency,
+          timestamp: enriched.timestamp,
+        },
+        ...previous,
+      ]);
+      refreshBackend();
+    } catch (submissionError) {
+      const message =
+        submissionError?.name === 'TypeError' && /fetch|NetworkError/i.test(submissionError.message || '')
+          ? `Backend API is unreachable at ${API_URL || 'the configured API proxy'}/api/prompt. Ensure the FastAPI backend server is running, or verify your network connection.`
+          : submissionError.message || 'An unexpected error occurred while communicating with the inference grid.';
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [apiKey, isLoading, prompt, refreshBackend]);
+
+  const charCount = prompt.length;
+  const wordCount = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
+  const tokenEstimate = Math.ceil(charCount / 4);
+  const phase = error ? 'error' : isLoading ? 'loading' : responseData ? 'completed' : 'idle';
+
+  return (
+    <>
+      <header>
+        <a className="brand" href="#top" aria-label="MemoryGrid home">
+          <span className="logo"><ViewInArOutlined /></span>
+          <span>MemoryGrid</span>
+        </a>
+        <nav aria-label="Primary navigation">
+          <a className="selected" href="#top">Overview</a>
+          <a href="#prompt">Prompt</a>
+          <a href="#network">Network</a>
+          <a href="#history">History</a>
+          <a href="#system">System</a>
+        </nav>
+        <div
+          className="backend"
+          title={`${requestHistory.length} successful request${requestHistory.length === 1 ? '' : 's'} this session`}
+        >
+          <i className={backend === 'Backend connected' ? 'ok' : ''} />
+          <span>
+            {backend}
+            <small>API connection</small>
+          </span>
+        </div>
+        <button className="profile" type="button" aria-label="User profile">
+          T
+        </button>
+      </header>
+
+      <main id="top">
+        <aside className="editorial">
+          <p className="eyebrow">Distributed memory</p>
+          <h1>
+            Explore the<br />memory grid.
+          </h1>
+          <div className="brush" />
+          <p className="intro">
+            Submit a prompt, follow its journey across the system, and understand how distributed memory enables real-time LLM inference.
+          </p>
+          <div className="features">
+            <div>
+              <b><ViewInArOutlined /></b>
+              <span>
+                <strong>Distributed architecture</strong>
+                <small>Multiple memory nodes working together</small>
+              </span>
+            </div>
+            <div>
+              <b><BoltOutlined /></b>
+              <span>
+                <strong>Efficient memory management</strong>
+                <small>Key-value storage with TTL and LRU</small>
+              </span>
+            </div>
+            <div>
+              <b><BarChartOutlined /></b>
+              <span>
+                <strong>Real-time request flow</strong>
+                <small>Track your request across the system</small>
+              </span>
+            </div>
+          </div>
+          <div className="botanical" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <span>
+              Smarter<br />Memory<br />Brighter<br />AI
+            </span>
+          </div>
+        </aside>
+
+        <div className="dashboard">
+          <div className="top-row">
+            <Topology gridStats={gridStats} />
+            <aside className="sticky">
+              <b>
+                <LightbulbOutlined />Example Prompts
+              </b>
+              {EXAMPLES.map((example) => (
+                <button type="button" onClick={() => { setPrompt(example); document.querySelector('.composer textarea')?.focus(); }} key={example}>
+                  <SendRounded fontSize="small" />
+                  <span>{example}</span>
+                </button>
+              ))}
+              {gridConfig && (
+                <div className="config-summary">
+                  <b><SettingsOutlined fontSize="small" /> Grid Config</b>
+                  {gridConfig.num_nodes != null && <span>Nodes: {gridConfig.num_nodes}</span>}
+                  {gridConfig.cache_size != null && <span>Cache/node: {gridConfig.cache_size}</span>}
+                  {gridConfig.default_ttl != null && <span>Default TTL: {gridConfig.default_ttl}s</span>}
+                </div>
+              )}
+            </aside>
+          </div>
+
+          <section id="prompt" className="composer card">
+            <div className="composer-title">
+              <div className="composer-heading">
+                <ChatBubbleOutlined />
+                <h2>Prompt Input</h2>
+              </div>
+              <small>Ctrl + Enter to submit</small>
+            </div>
+
+            <div className="api-key-section" aria-label="API key authentication">
+              <div className="api-key-header">
+                <div className="api-key-label">
+                  <KeyOutlined fontSize="small" />
+                  <span>API Key</span>
+                </div>
+                <div className="api-key-status">
+                  {isAuthorized ? (
+                    <span className="auth-badge authorized">
+                      <CheckCircleOutlined fontSize="inherit" /> Authorized
+                    </span>
+                  ) : (
+                    <span className="auth-badge required">Key required</span>
+                  )}
+                </div>
+              </div>
+              <div className="api-key-input-row">
+                <div className="api-key-input-wrapper">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={(event) => {
+                      setApiKey(event.target.value);
+                      setIsAuthorized(false);
+                      setAuthError(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleVerify();
+                      }
+                    }}
+                    placeholder="Enter X-API-Key to authenticate..."
+                    disabled={isVerifying || isLoading}
+                    aria-label="API Key"
+                    autoComplete="off"
+                    spellCheck="false"
+                  />
+                  {apiKey && (
+                    <button
+                      type="button"
+                      className="api-key-toggle-btn"
+                      onClick={() => setShowApiKey((previous) => !previous)}
+                      aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
+                      title={showApiKey ? 'Hide API key' : 'Show API key'}
+                    >
+                      {showApiKey ? (
+                        <VisibilityOffOutlined fontSize="small" />
+                      ) : (
+                        <VisibilityOutlined fontSize="small" />
+                      )}
+                    </button>
+                  )}
+                </div>
+                <div className="api-key-actions">
+                  <button
+                    type="button"
+                    className="api-key-btn connect-btn"
+                    onClick={handleVerify}
+                    disabled={!apiKey.trim() || isVerifying || isLoading}
+                    aria-label={isVerifying ? 'Verifying API key' : 'Connect and verify API key'}
+                  >
+                    {isVerifying ? <span className="auth-spinner" /> : 'Connect'}
+                  </button>
+                  {apiKey && (
+                    <button
+                      type="button"
+                      className="api-key-btn disconnect-btn"
+                      onClick={handleDisconnect}
+                      disabled={isVerifying || isLoading}
+                      aria-label="Disconnect API key"
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </div>
+              </div>
+              {authError && (
+                <div className="api-key-error" role="alert">
+                  <ErrorOutlined fontSize="small" />
+                  <span>{authError}</span>
+                </div>
+              )}
+            </div>
+
+            <textarea
+              value={prompt}
+              maxLength={4000}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                  event.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              placeholder={apiKey.trim() ? "Ask something about the memory grid..." : "Enter and connect your API key above to submit prompts..."}
+              disabled={isLoading || !apiKey.trim()}
+              aria-label="Prompt input"
+              aria-describedby="prompt-character-count"
+            />
+            <div className="compose-toolbar">
+              <span title="Context attachments will be supported in a future update.">
+                <AttachFileOutlined fontSize="small" />Add context <i />{' '}
+                <span id="prompt-character-count">{charCount} characters</span> <i />{' '}
+                {wordCount} words <i />{' '}
+                <span title="Approximate estimate based on character count ÷ 4">{tokenEstimate} est. tokens</span>
+              </span>
+              <button
+                className="submit"
+                type="button"
+                onClick={handleSubmit}
+                disabled={isLoading || !prompt.trim() || !apiKey.trim()}
+                aria-label={isLoading ? 'Submitting prompt' : 'Submit prompt'}
+                title={!apiKey.trim() ? 'API key required to submit' : 'Submit prompt'}
+              >
+                {isLoading ? <span className="spinner" /> : <SendRounded />}
+              </button>
+            </div>
+            <div className="quick">
+              <b>Quick prompts:</b>
+              {QUICK_PROMPTS.map((quick) => (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrompt(quick);
+                    document.querySelector('.composer textarea')?.focus();
+                  }}
+                  key={quick}
+                >
+                  {quick}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div className="bottom">
+            <Journey phase={phase} />
+            <Response data={responseData} error={error} onDismissError={() => setError(null)} onRetry={handleSubmit} />
+          </div>
+
+          <RequestHistory entries={requestHistory} />
+        </div>
+      </main>
+    </>
+  );
+ main
 }

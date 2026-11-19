@@ -3,6 +3,9 @@ from fastapi.testclient import TestClient
 import app.main as main
 
 
+HEADERS = {"X-API-Key": "test-api-key"}
+
+
 def test_recent_prompts_lists_prompt_with_cache_status(monkeypatch):
     request_id = "history-request-1"
     prompt = "remember this prompt"
@@ -17,6 +20,7 @@ def test_recent_prompts_lists_prompt_with_cache_status(monkeypatch):
             "response": "done",
             "cache": "hit",
             "error": None,
+            "latency_ms": 23,
         },
     )
     with main.recent_prompts_lock:
@@ -43,6 +47,7 @@ def test_recent_prompts_lists_prompt_with_cache_status(monkeypatch):
                     "prompt": prompt,
                     "status": "completed",
                     "cache": "hit",
+                    "latency_ms": 23,
                 }
             ],
         }
@@ -52,7 +57,6 @@ def test_recent_prompts_lists_prompt_with_cache_status(monkeypatch):
 
 
 def test_recent_prompts_keeps_only_latest_50(monkeypatch):
-    monkeypatch.setattr(main, "RATE_LIMIT", 60)
     request_ids = iter(f"history-request-{index}" for index in range(51))
     monkeypatch.setattr(main, "uuid4", lambda: next(request_ids))
     monkeypatch.setattr(
@@ -110,6 +114,7 @@ def test_recent_prompts_supports_limit():
             response = client.get(
                 "/api/prompts/recent",
                 params={"limit": 2},
+                headers=HEADERS,
             )
 
         assert response.status_code == 200
@@ -155,6 +160,7 @@ def test_recent_prompts_supports_offset():
             response = client.get(
                 "/api/prompts/recent",
                 params={"limit": 1, "offset": 1},
+                headers=HEADERS,
             )
 
         assert response.status_code == 200
@@ -193,6 +199,13 @@ def test_recent_prompts_rejects_invalid_pagination():
     assert invalid_limit.status_code == 422
     assert oversized_limit.status_code == 422
     assert negative_offset.status_code == 422
+
+
+def test_recent_prompts_is_public():
+    with TestClient(main.app) as client:
+        response = client.get("/api/prompts/recent")
+
+    assert response.status_code == 200
 
 
 def test_recent_prompts_filters_before_pagination():
@@ -237,6 +250,7 @@ def test_recent_prompts_filters_before_pagination():
                     "limit": 1,
                     "offset": 1,
                 },
+                headers=HEADERS,
             )
 
         assert response.status_code == 200
@@ -248,6 +262,59 @@ def test_recent_prompts_filters_before_pagination():
                     "prompt": "middle completed",
                     "status": "completed",
                     "cache": "hit",
+                }
+            ],
+        }
+    finally:
+        with main.recent_prompts_lock:
+            main.recent_prompts.clear()
+            main.recent_prompts.extend(original_prompts)
+
+
+def test_recent_prompts_searches_case_insensitively_before_pagination():
+    with main.recent_prompts_lock:
+        original_prompts = list(main.recent_prompts)
+        main.recent_prompts.clear()
+        main.recent_prompts.extend(
+            [
+                {
+                    "request_id": "match-3",
+                    "prompt": "Newest Matching PROMPT",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+                {
+                    "request_id": "other-1",
+                    "prompt": "An unrelated prompt",
+                    "status": "completed",
+                    "cache": "miss",
+                },
+                {
+                    "request_id": "match-2",
+                    "prompt": "Another matching prompt",
+                    "status": "failed",
+                    "cache": "miss",
+                },
+            ]
+        )
+
+    try:
+        with TestClient(main.app) as client:
+            response = client.get(
+                "/api/prompts/recent",
+                params={"q": "matching", "limit": 1, "offset": 1},
+                headers=HEADERS,
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "count": 2,
+            "prompts": [
+                {
+                    "request_id": "match-2",
+                    "prompt": "Another matching prompt",
+                    "status": "failed",
+                    "cache": "miss",
                 }
             ],
         }

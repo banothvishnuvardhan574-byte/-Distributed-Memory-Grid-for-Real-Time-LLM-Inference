@@ -17,7 +17,7 @@ from inference.exceptions import (
 logger = logging.getLogger(__name__)
 
 InferenceFunction = Callable[[str], str]
-DEFAULT_TIMEOUT_SECONDS = 15.0
+DEFAULT_TIMEOUT_SECONDS = 120.0
 WORKER_STARTUP_TIMEOUT_SECONDS = 120.0
 DEMO_MAX_TOKENS = 64
 

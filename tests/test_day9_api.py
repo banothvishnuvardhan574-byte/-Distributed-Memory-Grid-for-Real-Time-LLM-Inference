@@ -26,7 +26,6 @@ def test_empty_prompt_returns_bad_request():
     with pytest.raises(HTTPException) as exc_info:
         main.submit_prompt(
             main.PromptRequest(prompt=""),
-            x_api_key="test-api-key",
         )
 
     assert exc_info.value.status_code == 400
@@ -48,7 +47,6 @@ def test_worker_failure_returns_http_500_with_detail(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         main.submit_prompt(
             main.PromptRequest(prompt="day9"),
-            x_api_key="test-api-key",
         )
 
     assert exc_info.value.status_code == 500
@@ -71,7 +69,6 @@ def test_worker_failure_returns_http_500_without_counting_a_cache_miss(monkeypat
     with pytest.raises(HTTPException) as exc_info:
         main.submit_prompt(
             main.PromptRequest(prompt="worker failure over HTTP"),
-            x_api_key="test-api-key",
         )
 
     assert exc_info.value.status_code == 500

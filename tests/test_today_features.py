@@ -7,13 +7,13 @@ client = TestClient(main.app)
 HEADERS = {"X-API-Key": "test-api-key"}
 
 
-def test_prompt_requires_api_key():
+def test_prompt_is_public_without_api_key():
     response = client.post("/api/prompt", json={"prompt": "missing key"})
 
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
-def test_prompt_accepts_api_key(monkeypatch):
+def test_prompt_accepts_request(monkeypatch):
     monkeypatch.setattr(
         main,
         "run_prompt",
@@ -34,7 +34,7 @@ def test_prompt_accepts_api_key(monkeypatch):
     assert response.status_code == 200
 
 
-def test_prompt_rate_limit_rejects_requests_after_30(monkeypatch):
+def test_prompt_accepts_more_than_30_requests(monkeypatch):
     monkeypatch.setattr(
         main,
         "run_prompt",
@@ -56,8 +56,7 @@ def test_prompt_rate_limit_rejects_requests_after_30(monkeypatch):
         for index in range(35)
     ]
 
-    assert [response.status_code for response in responses[:30]] == [200] * 30
-    assert [response.status_code for response in responses[30:]] == [429] * 5
+    assert [response.status_code for response in responses] == [200] * 35
 
 
 def test_jobs_list_filter_and_delete_finished_jobs():

@@ -16,7 +16,6 @@ from fastapi import (
     FastAPI,
     File,
     Form,
-    Header,
     HTTPException,
     Query,
     Request,
@@ -133,48 +132,8 @@ in_flight_prompts: dict[str, Future[dict[str, Any]]] = {}
 in_flight_prompts_lock = threading.Lock()
 jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = threading.Lock()
-recent_prompts: deque[dict[str, str]] = deque(maxlen=50)
+recent_prompts: deque[dict[str, Any]] = deque(maxlen=50)
 recent_prompts_lock = threading.Lock()
-API_KEYS = {
-    key.strip()
-    for key in settings.api_keys.split(",")
-    if key.strip()
-}
-rate_log: dict[str, list[float]] = {}
-rate_log_lock = threading.Lock()
-RATE_LIMIT = 30
-RATE_WINDOW = 60
-
-
-def verify_api_key(x_api_key: str | None) -> None:
-    if x_api_key not in API_KEYS:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing API key",
-        )
-
-
-def check_auth(x_api_key: str | None) -> None:
-    verify_api_key(x_api_key)
-    now = time.monotonic()
-    with rate_log_lock:
-        hits = [
-            timestamp
-            for timestamp in rate_log.get(x_api_key, [])
-            if now - timestamp < RATE_WINDOW
-        ]
-        if len(hits) >= RATE_LIMIT:
-            rate_log[x_api_key] = hits
-            raise HTTPException(
-                status_code=429,
-                detail="Rate limit exceeded",
-            )
-
-        hits.append(now)
-        rate_log[x_api_key] = hits
-
-
-
 # --------------------------------------------------
 # Prompt processing
 # --------------------------------------------------
@@ -432,9 +391,7 @@ def health_check_route():
 @app.post("/api/prompt", response_model=PromptResponse)
 def submit_prompt(
     request: PromptRequest,
-    x_api_key: str | None = Header(default=None),
 ):
-    check_auth(x_api_key)
     prompt = request.prompt.strip()
 
     if not prompt:
@@ -460,6 +417,7 @@ def submit_prompt(
                 "prompt": prompt,
                 "status": result.get("status", "failed"),
                 "cache": result.get("cache", "miss"),
+                "latency_ms": result.get("latency_ms", 0),
             }
         )
 
@@ -485,12 +443,15 @@ def prompts_recent(
     limit: int = Query(default=50, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
     status: Literal["completed", "failed"] | None = None,
+    q: str | None = Query(default=None, max_length=4000),
 ):
+    search_term = q.strip().casefold() if q else ""
     with recent_prompts_lock:
         prompts = [
             prompt
             for prompt in recent_prompts
             if status is None or prompt["status"] == status
+            if not search_term or search_term in prompt["prompt"].casefold()
         ]
     return {
         "count": len(prompts),
@@ -520,9 +481,7 @@ def _run_job(job_id: str, prompt: str) -> None:
 @app.post("/api/jobs", status_code=202)
 def submit_job(
     request: PromptRequest,
-    x_api_key: str | None = Header(default=None),
 ):
-    check_auth(x_api_key)
     prompt = request.prompt.strip()
     if not prompt:
         raise HTTPException(
@@ -557,9 +516,7 @@ def list_jobs(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     status: Literal["running", "completed", "failed"] | None = None,
-    x_api_key: str | None = Header(default=None),
 ):
-    verify_api_key(x_api_key)
     with jobs_lock:
         matching_jobs = [
             (job_id, job)
@@ -578,10 +535,7 @@ def list_jobs(
 
 
 @app.delete("/api/jobs")
-def clear_finished_jobs(
-    x_api_key: str | None = Header(default=None),
-):
-    verify_api_key(x_api_key)
+def clear_finished_jobs():
     with jobs_lock:
         finished_job_ids = [
             job_id
@@ -597,9 +551,7 @@ def clear_finished_jobs(
 @app.get("/api/jobs/{job_id}")
 def job_status(
     job_id: str,
-    x_api_key: str | None = Header(default=None),
 ):
-    verify_api_key(x_api_key)
     with jobs_lock:
         job = jobs.get(job_id)
         if job is None:

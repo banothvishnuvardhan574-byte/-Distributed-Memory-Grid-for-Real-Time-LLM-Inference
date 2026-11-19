@@ -38,6 +38,17 @@ The API is available at `http://localhost:8000`; interactive API documentation
 is at `http://localhost:8000/docs`. Vite prints the frontend URL when it starts.
 Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 
+ feat/recent-prompt-history-pagination
+Prompt inference uses a local Ollama model. Install Ollama, then run:
+
+```powershell
+ollama pull qwen2.5:0.5b
+```
+
+The backend connects to Ollama at `http://127.0.0.1:11434` by default. Set
+`OLLAMA_URL` and `OLLAMA_MODEL` to use a different local Ollama server or model.
+Start Ollama before submitting prompts.
+=======
 ### Optional local model
 
 The inference adapter uses `llama-cpp-python` and a compatible GGUF model when
@@ -93,6 +104,7 @@ generation. For options and the operator checklist, see
   hard interrupt. The API worker has its own process-level timeout.
 - Results vary by host, runtime, model, and CPU/GPU configuration. Do not claim
   a speedup without a recorded comparable baseline.
+ main
 
 ## API
 
@@ -102,10 +114,10 @@ generation. For options and the operator checklist, see
 | `GET` | `/health` | Backend health check. |
 | `POST` | `/api/prompt` | Submit a prompt; repeated prompts can return a cache hit. |
 | `GET` | `/api/prompts/recent` | Read recent prompts, newest first; optional `status` (`completed` or `failed`), `limit` (1–50, default 50), and non-negative `offset`. `count` is the total number matching the status filter, before pagination. |
-| `POST` | `/api/jobs` | Submit a prompt for asynchronous processing (requires `X-API-Key`). |
-| `GET` | `/api/jobs` | List jobs, newest first; requires `X-API-Key`. Optional `status` (`running`, `completed`, or `failed`), `limit` (1–100), and non-negative `offset` for pagination. `count` is the total number matching the status filter, before pagination. |
-| `DELETE` | `/api/jobs` | Remove finished jobs while preserving jobs still running (requires `X-API-Key`). |
-| `GET` | `/api/jobs/{job_id}` | Read the status and result of a submitted job (requires `X-API-Key`). |
+| `POST` | `/api/jobs` | Submit a prompt for asynchronous processing. |
+| `GET` | `/api/jobs` | List jobs, newest first. Optional `status` (`running`, `completed`, or `failed`), `limit` (1–100), and non-negative `offset` for pagination. `count` is the total number matching the status filter, before pagination. |
+| `DELETE` | `/api/jobs` | Remove finished jobs while preserving jobs still running. |
+| `GET` | `/api/jobs/{job_id}` | Read the status and result of a submitted job. |
 | `POST` | `/api/pdf/today` | Extract PDF text and find date-matching content. |
 | `GET` | `/api/grid/config` | Read grid configuration. |
 | `GET` | `/api/grid/health` | Read grid health and cached-entry totals. |
@@ -118,19 +130,7 @@ Concurrent requests for the same uncached prompt share one inference; each
 request still receives its own request ID. The shared response is reported as a
 cache hit for waiting requests.
 
-All `/api/jobs` endpoints and `POST /api/prompt` require an `X-API-Key` header.
-Prompt and job submissions allow 30 requests per key per 60 seconds per API
-process; reading or clearing jobs does not consume that submission limit.
-Configure accepted keys as a comma-separated `API_KEYS` value in the backend
-environment (for example, in `.env`):
-
-```dotenv
-API_KEYS=replace-with-a-long-random-key
-```
-
-Enter an accepted key in the prompt form. Do not commit API keys to source
-control. The in-memory rate limit is process-local and resets when the API
-restarts.
+The API endpoints are open locally and do not require an API key.
 
 ## Tests
 

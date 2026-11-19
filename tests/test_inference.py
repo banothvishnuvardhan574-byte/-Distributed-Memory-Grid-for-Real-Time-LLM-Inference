@@ -59,16 +59,26 @@ class TestInferenceAdapter(unittest.TestCase):
         result = self.adapter.generate(prompt="What is distributed inference?", max_new_tokens=32)
         self.assertEqual(result, "Distributed inference shards computation.")
 
+        feat/recent-prompt-history-pagination
+    def test_worker_handler_schema_compliance(self):
+        """Verify worker handler returns a schema-compliant inference response."""
+
     @patch("examples.worker_integration_example.generate_response")
     def test_worker_handler_schema_compliance(self, mock_generate):
         """Verify worker handler catches ModelNotReadyError and returns failed schema."""
         mock_generate.side_effect = ModelNotReadyError("Weights missing")
+ main
         job = {"request_id": "req-101", "prompt": "Hello world"}
         result = handle_worker_job(job)
 
         self.assertEqual(result["request_id"], "req-101")
+< feat/recent-prompt-history-pagination
+        self.assertEqual(result["status"], "completed")
+        self.assertIsInstance(result["response"], str)
+
         self.assertEqual(result["status"], "failed")
         self.assertIn("Weights missing", result["error"])
+ main
 
 
 if __name__ == "__main__":

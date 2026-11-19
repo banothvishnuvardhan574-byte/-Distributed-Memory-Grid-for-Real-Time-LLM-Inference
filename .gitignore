@@ -57,3 +57,4 @@ huggingface/
 # User uploads & temporary
 user_uploaded_files/
 agent_sandbox/
+models/

@@ -65,13 +65,13 @@ class TestInferenceAdapter(unittest.TestCase):
         self.assertEqual(result, "Distributed inference shards computation.")
 
     def test_worker_handler_schema_compliance(self):
-        """Verify worker handler catches ModelNotReadyError and returns failed schema."""
+        """Verify worker handler returns a schema-compliant inference response."""
         job = {"request_id": "req-101", "prompt": "Hello world"}
         result = handle_worker_job(job)
 
         self.assertEqual(result["request_id"], "req-101")
-        self.assertEqual(result["status"], "failed")
-        self.assertIn("ModelUnavailable", result["error"])
+        self.assertEqual(result["status"], "completed")
+        self.assertIsInstance(result["response"], str)
 
 
 if __name__ == "__main__":

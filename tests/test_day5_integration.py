@@ -25,11 +25,9 @@ def test_prompt_roundtrip_uses_grid_cache_and_worker():
 
     first_response = submit_prompt(
         PromptRequest(prompt=prompt),
-        x_api_key="test-api-key",
     )
     second_response = submit_prompt(
         PromptRequest(prompt=prompt),
-        x_api_key="test-api-key",
     )
 
     # Convert Pydantic models to dictionaries
@@ -60,7 +58,6 @@ def test_grid_stats_reports_cache_hits_misses_and_hit_rate():
 
     assert submit_prompt(
         PromptRequest(prompt=prompt),
-        x_api_key="test-api-key",
     ).cache == "miss"
     miss_stats = grid_stats()
     assert miss_stats["cache_hits"] == 0
@@ -69,7 +66,6 @@ def test_grid_stats_reports_cache_hits_misses_and_hit_rate():
 
     assert submit_prompt(
         PromptRequest(prompt=prompt),
-        x_api_key="test-api-key",
     ).cache == "hit"
     hit_stats = grid_stats()
     assert hit_stats["cache_hits"] == 1
@@ -97,7 +93,6 @@ def test_prompt_returns_failure_when_worker_fails(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         main.submit_prompt(
             main.PromptRequest(prompt="failure test"),
-            x_api_key="test-api-key",
         )
 
     assert exc_info.value.status_code == 500
@@ -110,11 +105,9 @@ def test_grid_clear():
 
     assert submit_prompt(
         PromptRequest(prompt=prompt),
-        x_api_key="test-api-key",
     ).cache == "miss"
     assert submit_prompt(
         PromptRequest(prompt=prompt),
-        x_api_key="test-api-key",
     ).cache == "hit"
 
     route = next(

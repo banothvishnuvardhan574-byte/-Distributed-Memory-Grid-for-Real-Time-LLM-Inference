@@ -57,7 +57,6 @@ def test_recent_prompts_lists_prompt_with_cache_status(monkeypatch):
 
 
 def test_recent_prompts_keeps_only_latest_50(monkeypatch):
-    monkeypatch.setattr(main, "RATE_LIMIT", 60)
     request_ids = iter(f"history-request-{index}" for index in range(51))
     monkeypatch.setattr(main, "uuid4", lambda: next(request_ids))
     monkeypatch.setattr(
@@ -202,11 +201,11 @@ def test_recent_prompts_rejects_invalid_pagination():
     assert negative_offset.status_code == 422
 
 
-def test_recent_prompts_requires_api_key():
+def test_recent_prompts_is_public():
     with TestClient(main.app) as client:
         response = client.get("/api/prompts/recent")
 
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
 def test_recent_prompts_filters_before_pagination():

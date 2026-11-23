@@ -79,8 +79,45 @@ class InferenceAdapter:
         return cls._instance
 
     def _load_model(self) -> None:
-        """Load a local GGUF with llama.cpp, with Ollama as a fallback runtime."""
+        """Prefer Ollama and fall back to a local GGUF with llama.cpp."""
         start_time = time.time()
+        ollama_error = None
+
+        try:
+            with urllib_request.urlopen(
+                f"{self._ollama_url}/api/tags",
+                timeout=3,
+            ) as response:
+                tags = json.loads(response.read().decode("utf-8"))
+
+            available_models = {
+                item.get("name")
+                for item in tags.get("models", [])
+                if item.get("name")
+            }
+            if (
+                self._ollama_model in available_models
+                or f"{self._ollama_model}:latest" in available_models
+            ):
+                self._model = "ollama"
+                self._inference_backend = "ollama"
+                self.is_loaded = True
+                load_duration = time.time() - start_time
+                logger.info(
+                    "Ollama model %s ready in %.2fs.",
+                    self._ollama_model,
+                    load_duration,
+                )
+                self.model_metadata["load_time_sec"] = round(load_duration, 3)
+                return
+
+            ollama_error = ModelNotReadyError(
+                f"Ollama model '{self._ollama_model}' is not installed. "
+                f"Run: ollama pull {self._ollama_model}"
+            )
+        except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            ollama_error = exc
+
         llama_error = None
 
         if self.model_path:
@@ -103,45 +140,15 @@ class InferenceAdapter:
                 llama_error = exc
                 logger.warning("llama.cpp runtime unavailable: %s", exc)
 
-        try:
-            with urllib_request.urlopen(
-                f"{self._ollama_url}/api/tags",
-                timeout=3,
-            ) as response:
-                tags = json.loads(response.read().decode("utf-8"))
-
-            available_models = {
-                item.get("name")
-                for item in tags.get("models", [])
-                if item.get("name")
-            }
-            if (
-                self._ollama_model not in available_models
-                and f"{self._ollama_model}:latest" not in available_models
-            ):
-                raise ModelNotReadyError(
-                    f"Ollama model '{self._ollama_model}' is not installed. "
-                    f"Run: ollama pull {self._ollama_model}"
-                )
-
-            self._model = "ollama"
-            self._inference_backend = "ollama"
-            self.is_loaded = True
-            load_duration = time.time() - start_time
-            logger.info(
-                "Ollama model %s ready in %.2fs.",
-                self._ollama_model,
-                load_duration,
-            )
-            self.model_metadata["load_time_sec"] = round(load_duration, 3)
-            return
-        except ModelNotReadyError:
-            raise
-        except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-            detail = str(llama_error or exc)
-            raise ModelNotReadyError(
-                f"Model runtime is unavailable. llama.cpp error: {detail}"
-            ) from exc
+        errors = []
+        if llama_error is not None:
+            errors.append(f"llama.cpp error: {llama_error}")
+        if ollama_error is not None:
+            errors.append(f"Ollama error: {ollama_error}")
+        details = "; ".join(errors) or "No model runtime is available."
+        raise ModelNotReadyError(
+            f"Model runtime is unavailable. {details}"
+        ) from (llama_error or ollama_error)
 
     def generate(
         self,

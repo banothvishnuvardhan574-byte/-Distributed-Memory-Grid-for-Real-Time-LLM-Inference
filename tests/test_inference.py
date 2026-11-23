@@ -3,6 +3,7 @@ Unit and Contract Tests for Inference Adapter
 Targeted for Sagar's test runner and CI verification.
 """
 
+import builtins
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -39,6 +40,28 @@ class TestInferenceAdapter(unittest.TestCase):
         self.assertFalse(self.adapter.is_loaded)
         with self.assertRaises(ModelNotReadyError):
             self.adapter.generate(prompt="Explain distributed inference")
+
+    def test_available_ollama_model_is_preferred_over_llama_cpp(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = (
+            b'{"models":[{"name":"qwen2.5:0.5b"}]}'
+        )
+        self.adapter.model_path = "local-model.gguf"
+
+        with (
+            patch(
+                "inference.adapter.urllib_request.urlopen",
+                return_value=response,
+            ),
+            patch("builtins.__import__", wraps=builtins.__import__) as importer,
+        ):
+            self.adapter._load_model()
+
+        self.assertTrue(self.adapter.is_loaded)
+        self.assertEqual(self.adapter._inference_backend, "ollama")
+        self.assertFalse(
+            any(call.args[0] == "llama_cpp" for call in importer.call_args_list)
+        )
 
     def test_timeout_handling(self):
         """Simulated long-running inference must trigger InferenceTimeoutError."""

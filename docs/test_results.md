@@ -1,6 +1,46 @@
 # Test and Evidence Matrix
 
-**Run date:** 2026-11-02
+**Latest validation date:** 2026-11-16
+
+## Latest test and demo status
+
+This section supersedes the dated historical run notes below. The final clean
+backend suite run collected 122 tests: 122 passed, 0 failed, with one
+deprecation warning (83.90 seconds). A prior run overlapped the frontend
+production build and had five worker startup timeouts; those tests passed when
+re-run in isolation, and none failed in the clean full-suite rerun.
+
+The benchmark test module passed all five tests independently. Frontend lint
+and build both exited successfully; lint reported one existing React warning.
+The live API smoke benchmark made one request for each of the five prompts
+(zero warm-ups); all five returned HTTP 500 because this host has no configured
+model. Its measured round-trip times are failed-request measurements, not
+successful prompt latency or throughput; the JSON report is the authoritative
+run record. Direct model generation remains blocked because there is no
+configured `LLM_MODEL_PATH`, model file, or `llama-cpp-python` installation.
+TTFT is not applicable because the adapter does not stream tokens. The full
+machine/software details and per-request failures are in
+[the JSON smoke report](../results/demo-smoke-2026-11-16.json).
+The benchmark code now also fingerprints the checked-out diff and benchmark
+script in each newly generated report.
+
+| Validation scope | Pass | Fail | Blocked | Not run | Result |
+|---|---:|---:|---:|---:|---|
+| Full backend suite, final run (122 collected) | 122 | 0 | 0 | 0 | 83.90 seconds; one Starlette/httpx deprecation warning. |
+| Re-run of the five previously failed tests in isolation | 5 | 0 | 0 | 0 | All passed. |
+| Benchmark logic tests (`tests/test_performance_demo.py`) | 5 | 0 | 0 | 0 | Passed. |
+| Frontend lint | 1 | 0 | 0 | 0 | Exit 0; one `react(set-state-in-effect)` warning. |
+| Frontend production build | 1 | 0 | 0 | 0 | Exit 0. |
+| Live API performance smoke (one run/prompt, zero warm-ups) | 0 | 5 | 0 | 0 | Five HTTP 500s; failed-request latency is recorded in the JSON report, not reported as successful prompt performance. |
+| Real model-generation measurement | 0 | 0 | 1 | 0 | Blocked: model/runtime unavailable. |
+| Manual browser prompt/cache and PDF workflow | 0 | 0 | 0 | 1 | Not run; no browser E2E test evidence. |
+
+These are per-check counts, not additive totals: the benchmark tests are also
+part of the backend suite. The JSON benchmark keeps API failures, model
+generation blocked status, warm-up, environment, model checksum, and
+per-sample outcomes explicit; no performance value is claimed in this run.
+
+## Historical test matrix (2026-11-02)
 
 **Python command:** `.\.venv\Scripts\python.exe -m pytest -q`
 
@@ -8,27 +48,29 @@
 
 **Frontend commands:** `npm run lint` and `npm run build` (run from `frontend\`)
 
-This matrix records existing tests and the latest observed results. Test IDs
+This historical matrix records tests and results observed on 2026-11-02. Test IDs
 are pytest node IDs so each entry maps directly to a collected test. Python
-actuals are from the complete suite run above; all assertions passed. The
-frontend has lint/build scripts but no automated test script.
+actuals are from the complete suite run on that date. The frontend has
+lint/build scripts but no automated test script.
 Within a table cell, abbreviated `::test_...` IDs use the file path in the
 first full node ID in that cell.
 
 ## Current API contract
 
-The status codes and JSON examples below match the current implementation and
-automated tests. They document observed behavior; this file does not record
-stakeholder approval or a separate contract sign-off.
+The test contract below includes deterministic fake inference injected by the
+pytest fixture. It is not a claim that the live app returns stub output: the
+live adapter requires a configured model and otherwise reports a worker/model
+error. This file does not record stakeholder approval or separate contract
+sign-off.
 
 | Request | Expected status | Expected JSON |
 |---|---:|---|
 | `GET /` | 200 | `{"message":"LLM MemoryGrid API is running","status":"ready"}` |
 | `GET /health` | 200 | `{"status":"healthy"}` |
-| `POST /api/prompt` with `{"prompt":"  hello  "}` | 200 | `{"request_id":"<UUID>","status":"completed","prompt":"hello","response":"[stub] echo: hello","cache":"miss" or "hit","error":null}` |
+| `POST /api/prompt` with `{"prompt":"  hello  "}` in the pytest fake-inference fixture | 200 | `{"request_id":"<UUID>","status":"completed","prompt":"hello","response":"[stub] echo: hello","cache":"miss" or "hit","error":null,"latency_ms":<integer>}` |
 | `POST /api/prompt` with empty/whitespace prompt | 400 | `{"detail":"Prompt cannot be empty"}` |
 | `POST /api/prompt` with missing `prompt` or more than 4000 characters | 422 | FastAPI validation JSON with `detail`; missing input identifies `["body","prompt"]` and type `missing` |
-| `POST /api/prompt` when worker fails | 500 | `{"detail":"<safe worker error>"}`; the tested message is `"Failed to process prompt"` |
+| `POST /api/prompt` when worker/model is unavailable | 500 | JSON `detail` identifies a safe worker/model error. |
 | `POST /api/pdf/today` with an unsupported extension or unreadable/empty PDF | 400 | JSON `detail`; unsupported extension is `"Please upload a PDF file."`, unreadable content begins `"Unable to read PDF content"` |
 
 Worker-internal success/failure packets are also tested: success uses
@@ -97,3 +139,26 @@ run.
   `TestClient`/httpx and FastAPI `on_event` startup handling.
 - This is a local validation record dated 2026-11-02, not a CI or production
   deployment run.
+
+## Live local smoke verification
+
+**Run date:** 2026-11-11
+
+The backend and Vite frontend were started locally on `127.0.0.1:8000` and
+`127.0.0.1:5173`. These checks crossed the live HTTP API and worker, but the
+configured inference function is still `stub_inference`; this is not a real
+LLM-adapter verification.
+
+| Scenario | Actual result |
+|---|---|
+| `GET /health` | HTTP 200; `healthy`. |
+| Three unique `POST /api/prompt` requests | All HTTP 200, `completed`, with distinct request IDs and non-empty output. Responses were `[stub] echo: ...`; cache was `miss` for each. Request IDs: `60418558-406e-4345-b99b-caf41eed1984`, `64e6bbef-9295-4270-9b4c-cd0302a291f0`, `8b1caa13-e861-4788-bef0-91496ac1f5d6`. |
+| Repeat the first prompt | HTTP 200, `completed`, same cached output, new request ID `f1834952-3e9b-416f-bb70-cd4ac40fedf8`, cache `hit`. |
+| `GET /api/grid/stats` after those four requests | Actual in-memory backend reported 1 cache hit, 3 misses, 25% hit rate; three entries distributed across four live nodes. |
+| Browser prompt workflow | Loaded the frontend; submitted a prompt and saw completed status, output, request ID `80f2d2ce-7f1a-4e23-b8c4-c42976cd7b05`, latency (77 ms), and cache miss. Re-submitted the same prompt and saw cache hit with a new request ID. |
+| Frontend lint/build | `npm run lint` exited 0 with one `react(set-state-in-effect)` warning at `src/App.jsx:180`; `npm run build` succeeded (10,995 modules). |
+| Focused API/worker/cache tests | 22 passed, 0 failed; three deprecation warnings. Command: `.\.venv\Scripts\python.exe -m pytest tests\test_api_worker.py tests\test_day11_prompt_api.py tests\test_day16_integration.py tests\test_day17_integration.py tests\test_worker.py -q`. |
+
+This smoke check did not exercise a PDF upload in the browser or a real
+inference provider. Genuine inference remains blocked until the adapter is
+wired/configured and its model service is available.

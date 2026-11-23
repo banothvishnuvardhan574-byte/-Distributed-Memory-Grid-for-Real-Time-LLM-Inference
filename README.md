@@ -1,90 +1,9 @@
- suraj-inference
-# LLM MemoryGrid — Model & Inference Integration
-
-**Component Owner:** Suraj Kotrange  
-**Assigned Branch:** `suraj-inference`  
-**Execution Window:** 2–14 November 2026  
-**Primary Hand-off:** `generate_response(prompt: str) -> str` interface for `nikhila-worker` and `vishnu-backend`.
-
----
-
-## 1. Overview & Objective
-
-This component provides a lightweight, robust, reproducible local inference pipeline for the LLM MemoryGrid demonstrator. In accordance with the project rules:
-* Model execution is isolated behind a single public interface: `generate_response(prompt: str) -> str`.
-* The adapter enforces single-instance model loading in memory (no reloading weights per prompt).
-* Generation parameters are strictly bounded (max tokens, timeout, and explicit error states).
-* Stub/echo outputs are never disguised as real generation.
-
----
-
-## 2. Hardware Constraints Summary
-
-From empirical host benchmarking on 3 Nov 2026:
-* **CPU:** 2 vCPUs (Intel Xeon 6985P-C)
-* **RAM:** 7.8 GiB total (~6.7 GiB free)
-* **GPU:** None (CPU inference only)
-* **Storage:** 18 GiB free disk
-
-**Recommended Model:** `Qwen2.5-0.5B-Instruct` (GGUF Q4_K_M, ~380 MB download, ~650 MB RAM working set).
-
-Full feasibility study available in: [`docs/INFERENCE_OPTIONS.md`](docs/INFERENCE_OPTIONS.md).
-
----
-
-## 3. Project Structure
-
-```
-├── .gitignore
-├── docs/
-│   └── INFERENCE_OPTIONS.md          # Hardware audit, model benchmarks & Vishnu proposal
-├── inference/
-│   ├── __init__.py                   # Package exports
-│   ├── adapter.py                    # InferenceAdapter class & generate_response contract
-│   └── exceptions.py                 # Custom error hierarchy (ModelNotReadyError, etc.)
-├── examples/
-│   └── worker_integration_example.py # Minimal callable example for Nikhila
-└── tests/
-    └── test_inference.py             # Unit & contract tests for Sagar's test runner
-```
-
----
-
-## 4. Quick Start & Setup
-
-### Environment Setup
-```bash
-# Recommended Python version: 3.11+
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install runtime dependencies
-pip install llama-cpp-python
-```
-
-### Running Unit Tests
-```bash
-python3 -m unittest discover tests
-```
-
-### Worker Integration Pattern
-```python
-from inference import generate_response, ModelNotReadyError, InferenceTimeoutError
-
-try:
-    response_text = generate_response("Explain distributed inference", max_tokens=128)
-    print("Response:", response_text)
-except ModelNotReadyError as e:
-    print("Model not loaded:", e)
-except InferenceTimeoutError as e:
-    print("Timeout:", e)
-```
-
 # Distributed Memory Grid for Real-Time LLM Inference
 
 A prototype prompt-processing application with a FastAPI backend, a React/Vite
 portal, and an in-memory cache distributed across memory nodes. Prompt inference
-currently uses a deterministic stub rather than a production LLM provider.
+uses a local inference adapter; a compatible model/runtime must be configured
+for generation to succeed.
 
 ## Features
 
@@ -102,8 +21,9 @@ Requirements: Python 3.10 or newer, Node.js 18 or newer, and npm.
 Install backend dependencies and start the API from the repository root:
 
 ```powershell
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --reload
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
 In another terminal, install frontend dependencies and start Vite:
@@ -118,6 +38,7 @@ The API is available at `http://localhost:8000`; interactive API documentation
 is at `http://localhost:8000/docs`. Vite prints the frontend URL when it starts.
 Alternatively, run `./run_dev.sh` from Git Bash or WSL to start both services.
 
+ feat/recent-prompt-history-pagination
 Prompt inference uses a local Ollama model. Install Ollama, then run:
 
 ```powershell
@@ -127,6 +48,63 @@ ollama pull qwen2.5:0.5b
 The backend connects to Ollama at `http://127.0.0.1:11434` by default. Set
 `OLLAMA_URL` and `OLLAMA_MODEL` to use a different local Ollama server or model.
 Start Ollama before submitting prompts.
+=======
+### Optional local model
+
+The inference adapter uses `llama-cpp-python` and a compatible GGUF model when
+configured. These are not installed or downloaded by the default setup. Install
+the runtime, obtain a model file separately, and set its path before starting
+the API:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install llama-cpp-python
+$env:LLM_MODEL_PATH = "C:\models\your-instruct-model.gguf"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+The model's license, source, and checksum should be verified before use. If no
+usable model is configured, prompt generation fails explicitly; responses must
+not be described as real model output.
+
+## Architecture and measurement
+
+`POST /api/prompt` validates a prompt, checks the in-memory grid, and on a cache
+miss waits synchronously for the isolated worker to return. The worker calls
+the inference adapter; successful text is cached. Therefore API round-trip
+latency includes validation, cache/worker handling, and—on a miss—inference.
+The demonstration benchmark measures that live HTTP round trip separately from
+direct adapter generation time. The generation metric excludes model loading
+and worker IPC. The adapter does not stream tokens, so TTFT is not measured.
+
+For reproducible measurements, start the backend and run in a second terminal:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\performance_demo.py --runs 3 --warmup 1 --output results\demo-run.json
+```
+
+The script uses a fixed set of five prompts, appends unique sample identifiers
+to bypass cached answers for API requests, records hardware/software and git
+metadata, and saves per-request results plus mean, median, nearest-rank p95,
+min/max, and success/failure counts. It records unavailable model inference as
+blocked and does not substitute a stub. A model file is optional for API
+measurement; set `LLM_MODEL_PATH` or pass `--model-path` to measure genuine
+generation. For options and the operator checklist, see
+[the demo guide](docs/DEMO_GUIDE.md) and
+[the performance test plan](tests/performance_test_plan.md).
+
+## Known limitations
+
+- The cache and worker are process-local; this prototype does not demonstrate
+  multi-host distributed inference or durable/shared cache state.
+- API round-trip measurements are end-to-end request times, not pure network
+  overhead. Cache-miss requests include worker and generation time.
+- Direct model-generation measurements exclude model load and worker IPC.
+- The adapter makes non-streaming calls; TTFT is not applicable.
+- The direct adapter timeout is checked after generation returns; it is not a
+  hard interrupt. The API worker has its own process-level timeout.
+- Results vary by host, runtime, model, and CPU/GPU configuration. Do not claim
+  a speedup without a recorded comparable baseline.
+ main
 
 ## API
 

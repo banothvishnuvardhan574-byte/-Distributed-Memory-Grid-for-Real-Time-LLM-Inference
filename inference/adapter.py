@@ -1,11 +1,4 @@
-"""
-LLM MemoryGrid — Inference Adapter
-Owner: Suraj Kotrange (suraj-inference)
-Contract Hand-off: generate_response(prompt: str) -> str
-"""
-
 import os
-import sys
 import time
 import logging
 import json
@@ -27,12 +20,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 _AUTO_CONFIGURE = object()
 
 
-class InferenceAdapter:
-    """
-    Encapsulates local LLM loading and bounded text generation.
-    Maintains a persistent instance to prevent reloading model weights per request.
-    """
+DEFAULT_MODEL_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "models",
+    "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+)
 
+class InferenceAdapter:
     _instance: Optional["InferenceAdapter"] = None
 
     def __init__(self, model_path: Optional[str] | object = _AUTO_CONFIGURE, n_threads: int = 2):
@@ -50,6 +44,7 @@ class InferenceAdapter:
                 self.model_path = str(candidates[0]) if candidates else None
             else:
                 self.model_path = None
+
         self.n_threads = n_threads
         self.is_loaded = False
         self._model = None
@@ -68,12 +63,13 @@ class InferenceAdapter:
         else:
             logger.warning(
                 f"Model file not found at '{self.model_path}'. "
-                "Adapter ready in uninitialized state. Call load_model() with valid path."
+                "Adapter ready in uninitialized state."
             )
 
     @classmethod
     def get_instance(cls, model_path: Optional[str] | object = _AUTO_CONFIGURE) -> "InferenceAdapter":
         """Singleton accessor to ensure weights stay cached in memory."""
+
         if cls._instance is None:
             cls._instance = cls(model_path=model_path)
         return cls._instance
@@ -153,14 +149,10 @@ class InferenceAdapter:
     def generate(
         self,
         prompt: str,
-        max_new_tokens: int = 128,
+        max_new_tokens: int = 64,
         timeout_sec: float = 15.0,
         temperature: float = 0.7,
     ) -> str:
-        """
-        Executes bounded text inference.
-        Enforces timeout, input validation, and genuine completion.
-        """
         if prompt is None or not isinstance(prompt, str) or not prompt.strip():
             raise InvalidPromptError("Prompt must be a non-empty string.")
 
@@ -173,9 +165,6 @@ class InferenceAdapter:
         logger.info(f"Generating inference for prompt (chars={len(prompt)}, max_tokens={max_new_tokens})...")
 
         try:
-            if self._model != "ollama" and self._inference_backend == "ollama":
-                self._inference_backend = "llama"
-
             if self._inference_backend == "ollama":
                 payload = json.dumps({
                     "model": self._ollama_model,
@@ -206,7 +195,6 @@ class InferenceAdapter:
                     stop=["</s>", "<|im_end|>", "\n\nUser:"],
                 )
                 generated_text = output["choices"][0]["text"].strip()
-
             elapsed = time.time() - start_time
             if elapsed > timeout_sec:
                 raise InferenceTimeoutError(
@@ -222,15 +210,12 @@ class InferenceAdapter:
         except Exception as e:
             elapsed = time.time() - start_time
             if elapsed > timeout_sec:
-                raise InferenceTimeoutError(
-                    f"Inference timeout after {elapsed:.2f}s."
-                ) from e
+                raise InferenceTimeoutError(f"Inference timeout after {elapsed:.2f}s.") from e
             if isinstance(e, InferenceError):
                 raise
-            raise InferenceError(f"Generation failure during execution: {str(e)}") from e
+            raise InferenceError(f"Generation failure: {str(e)}") from e
 
 
-# Public Top-Level API Contract agreed with Vishnu and Nikhila
 _adapter_singleton: Optional[InferenceAdapter] = None
 
 def get_adapter() -> InferenceAdapter:
@@ -239,23 +224,6 @@ def get_adapter() -> InferenceAdapter:
         _adapter_singleton = InferenceAdapter.get_instance()
     return _adapter_singleton
 
-def generate_response(prompt: str, max_tokens: int = 128, timeout_sec: float = 15.0) -> str:
-    """
-    Public API contract for Nikhila's worker handler and Vishnu's backend.
-    
-    Args:
-        prompt: User input string.
-        max_tokens: Upper ceiling for generated tokens (default: 128).
-        timeout_sec: Maximum latency budget in seconds (default: 15.0).
-        
-    Returns:
-        Generated response string.
-        
-    Raises:
-        InvalidPromptError: If prompt is empty or malformed.
-        ModelNotReadyError: If model weights are not loaded.
-        InferenceTimeoutError: If execution exceeds timeout budget.
-        InferenceError: For internal runtime errors.
-    """
+def generate_response(prompt: str, max_tokens: int = 64, timeout_sec: float = 15.0) -> str:
     adapter = get_adapter()
     return adapter.generate(prompt=prompt, max_new_tokens=max_tokens, timeout_sec=timeout_sec)

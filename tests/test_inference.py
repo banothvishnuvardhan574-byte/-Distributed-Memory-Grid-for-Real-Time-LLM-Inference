@@ -1,3 +1,9 @@
+"""
+Unit and Contract Tests for Inference Adapter
+Targeted for Sagar's test runner and CI verification.
+"""
+
+import builtins
 import time
 import unittest
 from unittest.mock import MagicMock, patch
@@ -34,6 +40,28 @@ class TestInferenceAdapter(unittest.TestCase):
         with self.assertRaises(ModelNotReadyError):
             self.adapter.generate(prompt="Explain distributed inference")
 
+    def test_available_ollama_model_is_preferred_over_llama_cpp(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = (
+            b'{"models":[{"name":"qwen2.5:0.5b"}]}'
+        )
+        self.adapter.model_path = "local-model.gguf"
+
+        with (
+            patch(
+                "inference.adapter.urllib_request.urlopen",
+                return_value=response,
+            ),
+            patch("builtins.__import__", wraps=builtins.__import__) as importer,
+        ):
+            self.adapter._load_model()
+
+        self.assertTrue(self.adapter.is_loaded)
+        self.assertEqual(self.adapter._inference_backend, "ollama")
+        self.assertFalse(
+            any(call.args[0] == "llama_cpp" for call in importer.call_args_list)
+        )
+
     def test_timeout_handling(self):
         """Simulated long-running inference must trigger InferenceTimeoutError."""
         self.adapter.is_loaded = True
@@ -59,26 +87,16 @@ class TestInferenceAdapter(unittest.TestCase):
         result = self.adapter.generate(prompt="What is distributed inference?", max_new_tokens=32)
         self.assertEqual(result, "Distributed inference shards computation.")
 
-        feat/recent-prompt-history-pagination
-    def test_worker_handler_schema_compliance(self):
-        """Verify worker handler returns a schema-compliant inference response."""
-
     @patch("examples.worker_integration_example.generate_response")
     def test_worker_handler_schema_compliance(self, mock_generate):
         """Verify worker handler catches ModelNotReadyError and returns failed schema."""
         mock_generate.side_effect = ModelNotReadyError("Weights missing")
- main
         job = {"request_id": "req-101", "prompt": "Hello world"}
         result = handle_worker_job(job)
 
         self.assertEqual(result["request_id"], "req-101")
-< feat/recent-prompt-history-pagination
-        self.assertEqual(result["status"], "completed")
-        self.assertIsInstance(result["response"], str)
-
         self.assertEqual(result["status"], "failed")
         self.assertIn("Weights missing", result["error"])
- main
 
 
 if __name__ == "__main__":

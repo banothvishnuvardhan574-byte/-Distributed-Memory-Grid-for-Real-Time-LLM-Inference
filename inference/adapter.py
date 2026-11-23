@@ -17,7 +17,6 @@ from inference.exceptions import (
 logger = logging.getLogger("inference_adapter")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
- feat/recent-prompt-history-pagination
 _AUTO_CONFIGURE = object()
 
 
@@ -26,12 +25,10 @@ DEFAULT_MODEL_PATH = os.path.join(
     "models",
     "qwen2.5-0.5b-instruct-q4_k_m.gguf"
 )
- main
 
 class InferenceAdapter:
     _instance: Optional["InferenceAdapter"] = None
 
- feat/recent-prompt-history-pagination
     def __init__(self, model_path: Optional[str] | object = _AUTO_CONFIGURE, n_threads: int = 2):
         if model_path is _AUTO_CONFIGURE:
             configured_path = os.getenv("LLM_MODEL_PATH")
@@ -47,10 +44,7 @@ class InferenceAdapter:
                 self.model_path = str(candidates[0]) if candidates else None
             else:
                 self.model_path = None
-                
-    def __init__(self, model_path: Optional[str] = None, n_threads: int = 2):
-        self.model_path = model_path or os.getenv("LLM_MODEL_PATH", DEFAULT_MODEL_PATH)
- main
+
         self.n_threads = n_threads
         self.is_loaded = False
         self._model = None
@@ -73,20 +67,53 @@ class InferenceAdapter:
             )
 
     @classmethod
- feat/recent-prompt-history-pagination
     def get_instance(cls, model_path: Optional[str] | object = _AUTO_CONFIGURE) -> "InferenceAdapter":
         """Singleton accessor to ensure weights stay cached in memory."""
 
-    def get_instance(cls, model_path: Optional[str] = None) -> "InferenceAdapter":
- main
         if cls._instance is None:
             cls._instance = cls(model_path=model_path)
         return cls._instance
 
     def _load_model(self) -> None:
- feat/recent-prompt-history-pagination
-        """Load a local GGUF with llama.cpp, with Ollama as a fallback runtime."""
+        """Prefer Ollama and fall back to a local GGUF with llama.cpp."""
         start_time = time.time()
+        ollama_error = None
+
+        try:
+            with urllib_request.urlopen(
+                f"{self._ollama_url}/api/tags",
+                timeout=3,
+            ) as response:
+                tags = json.loads(response.read().decode("utf-8"))
+
+            available_models = {
+                item.get("name")
+                for item in tags.get("models", [])
+                if item.get("name")
+            }
+            if (
+                self._ollama_model in available_models
+                or f"{self._ollama_model}:latest" in available_models
+            ):
+                self._model = "ollama"
+                self._inference_backend = "ollama"
+                self.is_loaded = True
+                load_duration = time.time() - start_time
+                logger.info(
+                    "Ollama model %s ready in %.2fs.",
+                    self._ollama_model,
+                    load_duration,
+                )
+                self.model_metadata["load_time_sec"] = round(load_duration, 3)
+                return
+
+            ollama_error = ModelNotReadyError(
+                f"Ollama model '{self._ollama_model}' is not installed. "
+                f"Run: ollama pull {self._ollama_model}"
+            )
+        except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            ollama_error = exc
+
         llama_error = None
 
         if self.model_path:
@@ -109,64 +136,15 @@ class InferenceAdapter:
                 llama_error = exc
                 logger.warning("llama.cpp runtime unavailable: %s", exc)
 
-        try:
-            with urllib_request.urlopen(
-                f"{self._ollama_url}/api/tags",
-                timeout=3,
-            ) as response:
-                tags = json.loads(response.read().decode("utf-8"))
-
-            available_models = {
-                item.get("name")
-                for item in tags.get("models", [])
-                if item.get("name")
-            }
-            if (
-                self._ollama_model not in available_models
-                and f"{self._ollama_model}:latest" not in available_models
-            ):
-                raise ModelNotReadyError(
-                    f"Ollama model '{self._ollama_model}' is not installed. "
-                    f"Run: ollama pull {self._ollama_model}"
-                )
-
-            self._model = "ollama"
-            self._inference_backend = "ollama"
-
-        start_time = time.time()
-        logger.info(f"Loading weights from {self.model_path} onto CPU...")
-        try:
-            from llama_cpp import Llama
-            self._model = Llama(
-                model_path=self.model_path,
-                n_threads=self.n_threads,
-                n_ctx=1024,
-                verbose=False,
-            )
- main
-            self.is_loaded = True
-            load_duration = time.time() - start_time
-            logger.info(
-                "Ollama model %s ready in %.2fs.",
-                self._ollama_model,
-                load_duration,
-            )
-            self.model_metadata["load_time_sec"] = round(load_duration, 3)
- feat/recent-prompt-history-pagination
-            return
-        except ModelNotReadyError:
-            raise
-        except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-            detail = str(llama_error or exc)
-            raise ModelNotReadyError(
-                f"Model runtime is unavailable. llama.cpp error: {detail}"
-            ) from exc
-
-        except Exception as e:
-            self.is_loaded = False
-            self._model = None
-            raise ModelNotReadyError(f"Failed to load model weights: {str(e)}") from e
- main
+        errors = []
+        if llama_error is not None:
+            errors.append(f"llama.cpp error: {llama_error}")
+        if ollama_error is not None:
+            errors.append(f"Ollama error: {ollama_error}")
+        details = "; ".join(errors) or "No model runtime is available."
+        raise ModelNotReadyError(
+            f"Model runtime is unavailable. {details}"
+        ) from (llama_error or ollama_error)
 
     def generate(
         self,
@@ -187,12 +165,36 @@ class InferenceAdapter:
         logger.info(f"Generating inference for prompt (chars={len(prompt)}, max_tokens={max_new_tokens})...")
 
         try:
-            output = self._model(
-                prompt,
-                max_tokens=max_new_tokens,
-                temperature=temperature,
-                stop=["</s>", "<|im_end|>", "\n\nUser:"],
-            )
+            if self._inference_backend == "ollama":
+                payload = json.dumps({
+                    "model": self._ollama_model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "num_predict": max_new_tokens,
+                        "temperature": temperature,
+                    },
+                }).encode("utf-8")
+                api_request = urllib_request.Request(
+                    f"{self._ollama_url}/api/generate",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib_request.urlopen(
+                    api_request,
+                    timeout=timeout_sec,
+                ) as response:
+                    output = json.loads(response.read().decode("utf-8"))
+                generated_text = str(output.get("response", "")).strip()
+            else:
+                output = self._model(
+                    prompt,
+                    max_tokens=max_new_tokens,
+                    temperature=temperature,
+                    stop=["</s>", "<|im_end|>", "\n\nUser:"],
+                )
+                generated_text = output["choices"][0]["text"].strip()
             elapsed = time.time() - start_time
             if elapsed > timeout_sec:
                 raise InferenceTimeoutError(
